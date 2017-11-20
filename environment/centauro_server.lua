@@ -20,7 +20,7 @@ _target_dist = _init_target_dist
 _max_obs_dist = 1
 
 _new_ep_prob = 0
-_modifly_prob = 0.5
+_modifly_prob = 0.8
 
 function start()
     -- sleep (3)
@@ -111,7 +111,7 @@ function reset(inInts,inFloats,inStrings,inBuffer)
     -- print ('reset', env_mode, reset_mode)
 
     if reset_mode == 4 then 
-        _target_dist = 0.2
+        _target_dist = 0.15
     else 
         _target_dist = _init_target_dist
     end
@@ -232,8 +232,8 @@ function get_robot_state(inInts,inFloats,inStrings,inBuffer)
 
     state[1] = target_dist
     state[2] = dist_to_center
-    state[3] = target_angle/math.pi
-    state[4] = target_dist - 1 --(target_dist/(_target_dist*2)-0.5) * 2
+    state[3] = target_pos[1]/math.pi
+    state[4] = target_pos[2] - 1 --(target_dist/(_target_dist*2)-0.5) * 2
     -- state[3] = target_ori[3]
     -- state[4] = target_pos[3] - 0.4
     -- state[5] = _pre_target_l
@@ -602,7 +602,7 @@ function restore_ep(ep, modifly)
         -- robot_pos[2] = (math.random() - 0.5) *2 * _target_dist/2 + y_mid
         local modifly_tpye =  math.random(2)
         if _target_dist ~= _init_target_dist then 
-            shift = 0.2
+            shift = 0.15
             modifly_tpye = 3
         end        
         if modifly_tpye == 1 then 
