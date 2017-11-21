@@ -232,8 +232,8 @@ function get_robot_state(inInts,inFloats,inStrings,inBuffer)
 
     state[1] = target_dist
     state[2] = dist_to_center
-    state[3] = target_pos[1]/math.pi
-    state[4] = target_pos[2] - 1 --(target_dist/(_target_dist*2)-0.5) * 2
+    state[3] = target_angle/math.pi
+    state[4] = target_dist - 1 --(target_dist/(_target_dist*2)-0.5) * 2
     -- state[3] = target_ori[3]
     -- state[4] = target_pos[3] - 0.4
     -- state[5] = _pre_target_l

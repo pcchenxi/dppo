@@ -46,10 +46,9 @@ observation_space = map_pixel*map_pixel + 6  # 60 x 60 + 8  2*3 + 2 + 2
 
 action_space = len(action_list)
 
-STEP_SIZE = 100
 
 REWARD_GOAL = 10
-REWARD_STEP =  -0.1/400
+REWARD_STEP =  -1
 REWARD_CRASH = -1 #REWARD_STEP*10
 
 class Simu_env():
@@ -69,6 +68,7 @@ class Simu_env():
         self.goal_reached = False
         self.goal_counter = 0
 
+        self.step_size = 300
         self.init_step = 0
         # self.object_num = 0
         self.terrain_map = np.zeros((map_pixel, map_pixel), np.float32)
@@ -127,13 +127,14 @@ class Simu_env():
 
         # return sorted_state
 
-    def reset(self, env_mode, reset_mode, save_ep):
+    def reset(self, step_size, env_mode, reset_mode, save_ep):
         # print('reset')
         self.dist_pre = 1000
         self.min_obsdist_pre = 0.2
         self.obs_dist_pre = 0
         self.collide_num = 0
         self.ep_step = 0
+        self.step_size = step_size
         self.state_pre = []
         res, retInts, retFloats, retStrings, retBuffer = self.call_sim_function('centauro', 'reset', [observation_range*2, env_mode, reset_mode, save_ep])        
         # state, reward, min_dist, obs_count, is_finish, info = self.step([0, 0, 0, 0, 0])
@@ -204,7 +205,7 @@ class Simu_env():
         obs_reward = 0
 
         dist = robot_state[0]
-        target_reward = -(dist - self.dist_pre)/0.05 * 0.5
+        target_reward = -(dist - self.dist_pre)/0.05
         # target_reward = target_reward/(self.max_length*4)
         # if target_reward < 0:
         #     target_reward = 0
@@ -254,20 +255,21 @@ class Simu_env():
         if dist < 0.1 and info != 1: # and diff_l < 0.02:
             is_finish = True
             event_reward = REWARD_GOAL #self.total_ep_reward
-            # info = 'goal'
+            info = 'goal'
             # print('goal')
 
+        print(dist)
         if dist > 2: # out of boundary
             is_finish = True
-            event_reward = -REWARD_GOAL
+            # event_reward = -REWARD_GOAL
             info = 'out'
             # print('outof bound', robot_state[1])
 
-        # if self.ep_step > STEP_SIZE:
-        #     is_finish = True
-        #     # event_reward = REWARD_CRASH
-        #     info = 'unfinish'
-        #     # print('no step', self.ep_step)
+        # if self.ep_step >= self.step_size:
+            # is_finish = True
+            # event_reward = -REWARD_GOAL
+            # info = 'fail'
+            # print('no step', self.ep_step)
 
         # reward = REWARD_STEP + REWARD_STEP*np.square(action).sum()
         # reward = reward * (1 + diff_l + diff_h)
@@ -280,22 +282,22 @@ class Simu_env():
 
         # print(reward)
 
-        t = 50
-        is_finish = False        
-        reward = -dist/100
-        if dist < 0.1 and (not self.goal_reached):
-            reward += 1.
-            self.goal_counter += 1
-            if self.goal_counter > t:
-                reward += 10.
-                self.goal_reached = True
-                info = 'goal'
-                is_finish = True
-        elif dist > 0.1:
-            self.goal_counter = 0
-            self.goal_reached = False
+        # t = 50
+        # is_finish = False        
+        # reward = -dist/100
+        # if dist < 0.1 and (not self.goal_reached):
+        #     reward += 1.
+        #     self.goal_counter += 1
+        #     if self.goal_counter > t:
+        #         reward += 10.
+        #         self.goal_reached = True
+        #         info = 'goal'
+        #         is_finish = True
+        # elif dist > 0.1:
+        #     self.goal_counter = 0
+        #     self.goal_reached = False
 
-        # reward = event_reward -dist/100
+        reward = event_reward + target_reward
 
         return reward, min_dist, obs_count, is_finish, info
 
