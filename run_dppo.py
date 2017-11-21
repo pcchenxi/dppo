@@ -1,4 +1,4 @@
-
+from running_mean_std import RunningMeanStd
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 IT_MAX = 100000
 EP_LEN = 500
-N_WORKER = 7               # parallel workers
+N_WORKER = 1               # parallel workers
 GAMMA = 0.95                 # reward discount factor
 LAM = 0.9
 A_LR = 0.0001               # learning rate for actor
@@ -50,6 +50,9 @@ class PPO(object):
     def __init__(self):
         self.sess = tf.Session()
         self.tfs = tf.placeholder(tf.float32, [None, S_DIM], 'state')
+
+        with tf.variable_scope("obfilter"):
+            self.ob_rms = RunningMeanStd(self.sess, shape=S_DIM)
 
         # critic
         # l1 = self.feature #tf.layers.dense(self.feature, 100, tf.nn.relu)
@@ -112,7 +115,7 @@ class PPO(object):
 
 
         ###########################################################################################
-        self.total_loss = self.aloss + (self.closs*1 + self.loss_pred*0 + self.loss_history*0)
+        self.total_loss = self.aloss + (self.closs*1 + self.loss_pred*0 + self.loss_history*1)
         self.base_loss = self.aloss + self.closs*1
 
         self.train_op = tf.train.AdamOptimizer(LR).minimize(self.total_loss)
@@ -209,8 +212,8 @@ class PPO(object):
             # self.tfs_history: vr_states,
             # self.return_history: vr_returns            
         }
-        # st = self.sess.run(self.st, feed_dict = feed_dict)
-        # print(st)
+        st = self.sess.run(self.st, feed_dict = feed_dict)
+        print(st)
         vr_loss = 0
         tloss, aloss, vloss, entropy, _ = self.sess.run([self.base_loss, self.aloss, self.closs, self.entropy, self.train_base_op]        
         # tloss, aloss, vloss, vr_loss, entropy, _ = self.sess.run([self.base_loss, self.aloss, self.closs, self.loss_history, self.entropy, self.train_base_op]
@@ -231,8 +234,8 @@ class PPO(object):
             self.tfs_history: vr_states,
             self.return_history: vr_returns
         }
-        # st = self.sess.run(self.st, feed_dict = feed_dict)
-        # print(st)
+        st = self.sess.run(self.st, feed_dict = feed_dict)
+        print(st)
         tloss, aloss, vloss, rp_loss, vr_loss, entropy, _ = self.sess.run([self.total_loss, self.aloss, self.closs, self.loss_pred, self.loss_history, self.entropy, self.train_op]
         , feed_dict = feed_dict)
 
@@ -247,7 +250,7 @@ class PPO(object):
             data = np.vstack(data)
             # s, a, r, adv = data[:, :S_DIM], data[:, S_DIM: S_DIM + A_DIM], data[:, S_DIM + A_DIM: S_DIM + A_DIM + 1], data[:, -1:]
             s, a, r, adv = data[:, :S_DIM], data[:, S_DIM: S_DIM + 1], data[:, S_DIM + 1: S_DIM + 1 + 1], data[:, -1:]
-
+            self.ob_rms.update(s)
             # if adv.std() != 0:
             #     adv = (adv - adv.mean())/adv.std()
 
@@ -266,11 +269,12 @@ class PPO(object):
 
                 # vr_states = np.concatenate((vr_states, s), axis=0)
                 # vr_returns = np.concatenate((vr_returns, r), axis=0) 
-                if len(rp_returns) != 0:
+                if len(rp_states) != 0:
                     vr_states = np.concatenate((vr_states, rp_states), axis=0)
                     vr_returns = np.concatenate((vr_returns, rp_returns), axis=0)    
 
-                if len(rp_returns) != 0:                 
+                if len(rp_states) != 0:     
+                    print(len(rp_states))            
                     tloss, aloss, vloss, rp_loss, vr_loss, entropy = self.update_all_task(s, a, r, adv, rp_states, rp_labels, vr_states, vr_returns)
                 else:
                     tloss, aloss, vloss, rp_loss, vr_loss, entropy = self.update_base_task(s, a, r, adv, vr_states, vr_returns)
@@ -312,11 +316,14 @@ class PPO(object):
 
     def _build_feature_net(self, name, input_state, reuse = False):
         w_init = tf.contrib.layers.xavier_initializer()
+        # w_init = tf.zeros_initializer()
         with tf.variable_scope(name, reuse=reuse):
             state_size = 5
             num_img = S_DIM - state_size - 1# 
             img_size = int(math.sqrt(num_img))
             print(num_img, img_size)
+
+            input_state = tf.clip_by_value((input_state - self.ob_rms.mean) / self.ob_rms.std, -5.0, 5.0)
 
             ob_grid = tf.slice(input_state, [0, 0], [-1, num_img])
             self.st = tf.slice(input_state, [0, num_img], [-1, state_size])
@@ -335,10 +342,10 @@ class PPO(object):
             x = tf.layers.dense(x, 50, tf.nn.tanh, kernel_initializer=w_init, name='x_fc2' )
 
             # process state
-            state_rt = tf.layers.dense(ob_state, state_size*10, tf.nn.tanh, kernel_initializer=w_init, name='rt_fc1' )
+            # state_rt = tf.layers.dense(ob_state, state_size*10, tf.nn.tanh, kernel_initializer=w_init, name='rt_fc1' )
             # state_rt = tf.layers.dense(state_rt, state_size*10, tf.nn.tanh, name='rt_fc2' )
             
-            feature = tf.concat([x , state_rt], 1, name = 'concat')
+            feature = tf.concat([x , ob_state], 1, name = 'concat')
             # feature = state_rt
             # feature = tf.layers.dense(state_concat, 100, tf.nn.tanh, name='feature_fc' )
         return feature
@@ -363,8 +370,9 @@ class PPO(object):
 
     def _build_cnet(self, name, input_state, reuse = False):
         w_init = tf.contrib.layers.xavier_initializer()
+        # w_init = tf.zeros_initializer()
         with tf.variable_scope(name, reuse=reuse):
-            l1 = tf.layers.dense(input_state, 50, tf.nn.tanh, kernel_initializer=w_init)
+            l1 = tf.layers.dense(input_state, 100, tf.nn.tanh, kernel_initializer=w_init)
             # l1 = input_state
             v = tf.layers.dense(l1, 1)
         return v
@@ -378,7 +386,7 @@ class PPO(object):
 
     #     return np.clip(a, -1, 1)
 
-    def choose_action(self, s, stochastic = True):  # run by a local
+    def choose_action(self, s, stochastic = True, show_plot = False):  # run by a local
         prob_weights = self.sess.run(self.pi, feed_dict={self.tfs: s[np.newaxis, :]})
 
         if stochastic:
@@ -387,11 +395,13 @@ class PPO(object):
         else:
             action = np.argmax(prob_weights.ravel())
 
-        if stochastic == False:
+        if show_plot:
             prob = prob_weights.ravel()
             plt.clf()
-            plt.scatter(range(A_DIM+1), np.append(prob, 0.5).flatten() )
+            plt.scatter(range(A_DIM+1), np.append(prob, 0.05).flatten() )
             plt.pause(0.01)
+            # print(s[-6:])
+            # print(prob)
         return action
 
     def get_v(self, s):
@@ -443,20 +453,20 @@ class Worker(object):
             if Goal_count > 100:            
                 s = self.env.reset(EP_LEN, 0, 1, 0)
             else:
-                s = self.env.reset(EP_LEN, 0, 1, 0)
+                s = self.env.reset(EP_LEN, 0, 4, 0)
 
-            s[-1] = (ep_step/EP_LEN-0.5)*2
+            # s[-1] = (ep_step/EP_LEN-0.5)*2
 
             if self.wid == 0 and N_WORKER>1:
                 for t in range(EP_LEN):
-                    a = self.ppo.choose_action(s, stochastic = False)
+                    a = self.ppo.choose_action(s, stochastic = False, show_plot = True)
                     s_, r, done, info = self.env.step(a)
                     vpred = self.ppo.get_v(s)
                     vpred_ = self.ppo.get_v(s_)
                     td = r + GAMMA*vpred_ - vpred
                     print("action: %5i| r: %7.4f| vpred: %7.4f| v_next: %7.4f| TD: %7.4f| " %(a, r, vpred, vpred_, td))
                     s = s_
-                    if info == 'goal' or t == EP_LEN-1 or info == 'out':
+                    if info == 'goal' or t == EP_LEN-1 or info == 'out' or info == 'crash':
                         break
 
             else:
@@ -467,13 +477,17 @@ class Worker(object):
                         ROLLING_EVENT.wait()                        # wait until PPO is updated
                         GLOBAL_UPDATE_COUNTER -= len(buffer_r)
                         buffer_s, buffer_a, buffer_r, buffer_vpred, buffer_return, buffer_adv = [], [], [], [], [], []
-                    a = self.ppo.choose_action(s)
+
+                    if N_WORKER == 1:
+                        a = self.ppo.choose_action(s, show_plot = True)
+                    else:
+                        a = self.ppo.choose_action(s, show_plot = False)
                     s_, r, done, info = self.env.step(a)
                     vpred = self.ppo.get_v(s)
                     if N_WORKER == 1:
                         vpred_ = self.ppo.get_v(s_)
                         td = r + GAMMA*vpred_ - vpred
-                        print("r: %7.4f| vpred: %7.4f| v_next: %7.4f| TD: %7.4f| " %(r, vpred, vpred_, td))
+                        print("action: %5i| r: %7.4f| vpred: %7.4f| v_next: %7.4f| TD: %7.4f| " %(a, r, vpred, vpred_, td))
 
                     buffer_s.append(s)
                     buffer_a.append(a)
@@ -483,7 +497,7 @@ class Worker(object):
                     s = s_
                     ep_step += 1
                     t += 1
-
+                    
                     GLOBAL_UPDATE_COUNTER += 1               # count to minimum batch size, no need to wait other workers
                     if t == EP_LEN-1 or done or GLOBAL_UPDATE_COUNTER >= MIN_BATCH_SIZE:
                         if info == 'unfinish':

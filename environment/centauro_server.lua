@@ -232,8 +232,8 @@ function get_robot_state(inInts,inFloats,inStrings,inBuffer)
 
     state[1] = target_dist
     state[2] = dist_to_center
-    state[3] = target_angle/math.pi
-    state[4] = target_dist - 1 --(target_dist/(_target_dist*2)-0.5) * 2
+    state[3] = target_angle
+    state[4] = target_dist  --(target_dist/(_target_dist*2)-0.5) * 2
     -- state[3] = target_ori[3]
     -- state[4] = target_pos[3] - 0.4
     -- state[5] = _pre_target_l
@@ -253,9 +253,9 @@ function get_robot_state(inInts,inFloats,inStrings,inBuffer)
         state[#state+1] = obs_pos[3]
         state[#state+1] = obs_pos_g[3]
     end
-    state[#state+1] = ori[3]/math.pi
-    state[#state+1] = pos[3]/0.15
-    state[#state+1] = (leg_l-0.13)/0.15
+    state[#state+1] = ori[3]
+    state[#state+1] = pos[3]
+    state[#state+1] = leg_l
 
     local threshold = 0.3
     local res, data = simCheckDistance(_collection_robot_hd, _collection_hd, threshold)

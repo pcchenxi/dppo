@@ -258,7 +258,6 @@ class Simu_env():
             info = 'goal'
             # print('goal')
 
-        print(dist)
         if dist > 2: # out of boundary
             is_finish = True
             # event_reward = -REWARD_GOAL
