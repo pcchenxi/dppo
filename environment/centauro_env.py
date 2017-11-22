@@ -252,7 +252,7 @@ class Simu_env():
         if np.count_nonzero(action) == 0:
             event_reward = REWARD_CRASH
 
-        if dist < 0.1 and info != 1: # and diff_l < 0.02:
+        if dist < 0.1 and info != 'crash': # and diff_l < 0.02:
             is_finish = True
             event_reward = REWARD_GOAL #self.total_ep_reward
             info = 'goal'

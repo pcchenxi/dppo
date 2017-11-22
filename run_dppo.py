@@ -11,13 +11,16 @@ import matplotlib.pyplot as plt
 
 IT_MAX = 100000
 EP_LEN = 500
-N_WORKER = 1               # parallel workers
+N_WORKER = 4               # parallel workers
 GAMMA = 0.95                 # reward discount factor
 LAM = 0.9
 A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0002               # learning rate for critic
 LR = 0.0001
-MIN_BATCH_SIZE = 128         # minimum batch size for updating PPO
+
+BATCH_SIZE = 2048
+MIN_BATCH_SIZE = 64         # minimum batch size for updating PPO
+
 UPDATE_STEP = 5            # loop update operation n-steps
 EPSILON = 0.3               # for clipping surrogate objective
 GAME = 'Pendulum-v0'
@@ -85,7 +88,7 @@ class PPO(object):
         # log_prob_pi = tf.log(self.pi) * tf.one_hot(self.tfa, A_DIM, dtype=tf.float32)
         # log_prob_oldpi = tf.log(oldpi) * tf.one_hot(self.tfa, A_DIM, dtype=tf.float32)
         # ratio = tf.exp(log_prob_pi - log_prob_oldpi)
-        self.entropy = -tf.reduce_sum(self.pi * tf.log(self.pi + 1e-5),axis=1, keep_dims=True)
+        self.entropy = -tf.reduce_mean(self.pi * tf.log(self.pi + 1e-5),axis=1, keep_dims=True)
 
         # surr1 = ratio * self.tfadv                       # surrogate loss
         # surr2 = tf.clip_by_value(ratio, 1. - EPSILON, 1. + EPSILON) * self.tfadv
@@ -115,8 +118,8 @@ class PPO(object):
 
 
         ###########################################################################################
-        self.total_loss = self.aloss + (self.closs*1 + self.loss_pred*0 + self.loss_history*1)
-        self.base_loss = self.aloss + self.closs*1
+        self.total_loss = self.aloss + (self.closs*0.5 + self.loss_pred*0 + self.loss_history*0)
+        self.base_loss = self.aloss + self.closs*0.5
 
         self.train_op = tf.train.AdamOptimizer(LR).minimize(self.total_loss)
         self.train_base_op = tf.train.AdamOptimizer(LR).minimize(self.base_loss)
@@ -209,14 +212,14 @@ class PPO(object):
             self.tfdc_r: r, 
             self.tfadv: adv, 
 
-            # self.tfs_history: vr_states,
-            # self.return_history: vr_returns            
+            self.tfs_history: vr_states,
+            self.return_history: vr_returns            
         }
-        st = self.sess.run(self.st, feed_dict = feed_dict)
-        print(st)
+        # st = self.sess.run(self.st, feed_dict = feed_dict)
+        # print(st)
         vr_loss = 0
-        tloss, aloss, vloss, entropy, _ = self.sess.run([self.base_loss, self.aloss, self.closs, self.entropy, self.train_base_op]        
-        # tloss, aloss, vloss, vr_loss, entropy, _ = self.sess.run([self.base_loss, self.aloss, self.closs, self.loss_history, self.entropy, self.train_base_op]
+        # tloss, aloss, vloss, entropy, _ = self.sess.run([self.base_loss, self.aloss, self.closs, self.entropy, self.train_base_op]        
+        tloss, aloss, vloss, vr_loss, entropy, _ = self.sess.run([self.base_loss, self.aloss, self.closs, self.loss_history, self.entropy, self.train_base_op]
         , feed_dict = feed_dict)
 
         return tloss, aloss, vloss, 0, vr_loss, np.mean(entropy)
@@ -234,12 +237,24 @@ class PPO(object):
             self.tfs_history: vr_states,
             self.return_history: vr_returns
         }
-        st = self.sess.run(self.st, feed_dict = feed_dict)
-        print(st)
+        # st = self.sess.run(self.st, feed_dict = feed_dict)
+        # print(st)
         tloss, aloss, vloss, rp_loss, vr_loss, entropy, _ = self.sess.run([self.total_loss, self.aloss, self.closs, self.loss_pred, self.loss_history, self.entropy, self.train_op]
         , feed_dict = feed_dict)
 
         return tloss, aloss, vloss, rp_loss, vr_loss, np.mean(entropy)
+
+    def shuffel_data(self, s, a, r, adv):
+        index_shuffeled = np.random.choice(len(r), len(r), replace=False)
+        s_shuf, a_shuf, r_shuf, adv_shuf = [], [], [], []
+
+        for i in index_shuffeled:
+            s_shuf.append(s[i])
+            a_shuf.append(a[i])
+            r_shuf.append(r[i])
+            adv_shuf.append(adv[i])
+
+        return s_shuf, a_shuf, r_shuf, adv_shuf
 
     def update(self):
         global GLOBAL_UPDATE_COUNTER, G_ITERATION
@@ -251,46 +266,56 @@ class PPO(object):
             # s, a, r, adv = data[:, :S_DIM], data[:, S_DIM: S_DIM + A_DIM], data[:, S_DIM + A_DIM: S_DIM + A_DIM + 1], data[:, -1:]
             s, a, r, adv = data[:, :S_DIM], data[:, S_DIM: S_DIM + 1], data[:, S_DIM + 1: S_DIM + 1 + 1], data[:, -1:]
             self.ob_rms.update(s)
-            # if adv.std() != 0:
-            #     adv = (adv - adv.mean())/adv.std()
+            if adv.std() != 0:
+                adv = (adv - adv.mean())/adv.std()
 
             # adv = self.sess.run(self.advantage, {self.tfs: s, self.tfdc_r: r})
             # update actor and critic in a update loop
 
             print(G_ITERATION, '  --------------- update! batch size:', len(a), '-----------------')
-            tloss, aloss, vloss, rp_loss, vr_loss = [], [], [], [], []
-            tloss_sum, aloss_sum, vloss_sum, rp_loss_sum, vr_loss_sum, entropy_sum = 0, 0, 0, 0, 0, 0  
+            print('--------------------------------------------------------------------------------------')
 
             for _ in range(UPDATE_STEP):
                 # construct reward predict data
+                tloss, aloss, vloss, rp_loss, vr_loss = [], [], [], [], []
+                tloss_sum, aloss_sum, vloss_sum, rp_loss_sum, vr_loss_sum, entropy_sum = 0, 0, 0, 0, 0, 0  
 
-                rp_states, rp_labels, rp_returns = self.get_rp_buffer(MIN_BATCH_SIZE*1, MIN_BATCH_SIZE*1)
-                vr_states, vr_returns = self.get_vr_buffer(MIN_BATCH_SIZE*1)
+                s, a, r, adv = self.shuffel_data(s, a, r, adv)
+                count = 0
+                for start in range(0, len(r), MIN_BATCH_SIZE):
+                    count += 1
+                    end = start + MIN_BATCH_SIZE
+                    if end > len(r) - 1:
+                        break
+                    sub_s = s[start:end]
+                    sub_a = a[start:end]
+                    sub_r = r[start:end]
+                    sub_adv = adv[start:end]
 
-                # vr_states = np.concatenate((vr_states, s), axis=0)
-                # vr_returns = np.concatenate((vr_returns, r), axis=0) 
-                if len(rp_states) != 0:
-                    vr_states = np.concatenate((vr_states, rp_states), axis=0)
-                    vr_returns = np.concatenate((vr_returns, rp_returns), axis=0)    
+                    rp_states, rp_labels, rp_returns = self.get_rp_buffer(MIN_BATCH_SIZE*1, MIN_BATCH_SIZE*1)
+                    vr_states, vr_returns = self.get_vr_buffer(MIN_BATCH_SIZE*1)
 
-                if len(rp_states) != 0:     
-                    print(len(rp_states))            
-                    tloss, aloss, vloss, rp_loss, vr_loss, entropy = self.update_all_task(s, a, r, adv, rp_states, rp_labels, vr_states, vr_returns)
-                else:
-                    tloss, aloss, vloss, rp_loss, vr_loss, entropy = self.update_base_task(s, a, r, adv, vr_states, vr_returns)
-                
-                print("aloss: %7.4f|, vloss: %7.4f|, rp_loss: %7.4f|, vr_loss: %7.4f|, entropy: %7.4f" % (np.mean(aloss), np.mean(vloss), np.mean(rp_loss), np.mean(vr_loss), entropy))
-                
-                tloss_sum += tloss
-                aloss_sum += aloss 
-                vloss_sum += vloss 
-                rp_loss_sum += rp_loss
-                vr_loss_sum += vr_loss
-                entropy_sum += entropy
+                    # vr_states = np.concatenate((vr_states, s), axis=0)
+                    # vr_returns = np.concatenate((vr_returns, r), axis=0) 
+                    if len(rp_states) != 0:
+                        vr_states = np.concatenate((vr_states, rp_states), axis=0)
+                        vr_returns = np.concatenate((vr_returns, rp_returns), axis=0)    
 
-            print('--------------------------------------------------------------------------------------')
-            print("aloss: %7.4f|, vloss: %7.4f|, rp_loss: %7.4f|, vr_loss: %7.4f|, entropy: %7.4f" % \
-                                (aloss_sum/UPDATE_STEP, vloss_sum/UPDATE_STEP, rp_loss_sum/UPDATE_STEP, vr_loss_sum/UPDATE_STEP, entropy_sum/UPDATE_STEP))
+
+                    # if len(rp_states) != 0:     
+                    #     tloss, aloss, vloss, rp_loss, vr_loss, entropy = self.update_all_task(sub_s, sub_a, sub_r, sub_adv, rp_states, rp_labels, vr_states, vr_returns)
+                    # else:
+                    tloss, aloss, vloss, rp_loss, vr_loss, entropy = self.update_base_task(sub_s, sub_a, sub_r, sub_adv, vr_states, vr_returns)
+                                        
+                    tloss_sum += tloss
+                    aloss_sum += aloss 
+                    vloss_sum += vloss 
+                    rp_loss_sum += rp_loss
+                    vr_loss_sum += vr_loss
+                    entropy_sum += entropy
+
+                print("aloss: %7.4f|, vloss: %7.4f|, rp_loss: %7.4f|, vr_loss: %7.4f|, entropy: %7.4f" % \
+                                    (aloss_sum/count, vloss_sum/count, rp_loss_sum/count, vr_loss_sum/count, entropy_sum/count))
 
             # [self.sess.run(self.atrain_op, {self.tfs: s, self.tfa: a, self.tfadv: adv}) for _ in range(UPDATE_STEP)]
             # [self.sess.run(self.ctrain_op, {self.tfs: s, self.tfdc_r: r}) for _ in range(UPDATE_STEP)]
@@ -342,10 +367,10 @@ class PPO(object):
             x = tf.layers.dense(x, 50, tf.nn.tanh, kernel_initializer=w_init, name='x_fc2' )
 
             # process state
-            # state_rt = tf.layers.dense(ob_state, state_size*10, tf.nn.tanh, kernel_initializer=w_init, name='rt_fc1' )
+            state_rt = tf.layers.dense(ob_state, state_size*10, tf.nn.tanh, kernel_initializer=w_init, name='rt_fc1' )
             # state_rt = tf.layers.dense(state_rt, state_size*10, tf.nn.tanh, name='rt_fc2' )
             
-            feature = tf.concat([x , ob_state], 1, name = 'concat')
+            feature = tf.concat([x , state_rt], 1, name = 'concat')
             # feature = state_rt
             # feature = tf.layers.dense(state_concat, 100, tf.nn.tanh, name='feature_fc' )
         return feature
@@ -398,7 +423,7 @@ class PPO(object):
         if show_plot:
             prob = prob_weights.ravel()
             plt.clf()
-            plt.scatter(range(A_DIM+1), np.append(prob, 0.05).flatten() )
+            plt.scatter(range(A_DIM+1), np.append(prob, 0.5).flatten() )
             plt.pause(0.01)
             # print(s[-6:])
             # print(prob)
@@ -450,10 +475,10 @@ class Worker(object):
             ep_crash = 0
             ep_step = 0
 
-            if Goal_count > 100:            
-                s = self.env.reset(EP_LEN, 0, 1, 0)
-            else:
-                s = self.env.reset(EP_LEN, 0, 4, 0)
+            # if Goal_count > 100:            
+            s = self.env.reset(EP_LEN, 0, 1, 0)
+            # else:
+            #     s = self.env.reset(EP_LEN, 0, 4, 0)
 
             # s[-1] = (ep_step/EP_LEN-0.5)*2
 
@@ -499,7 +524,7 @@ class Worker(object):
                     t += 1
                     
                     GLOBAL_UPDATE_COUNTER += 1               # count to minimum batch size, no need to wait other workers
-                    if t == EP_LEN-1 or done or GLOBAL_UPDATE_COUNTER >= MIN_BATCH_SIZE:
+                    if t == EP_LEN-1 or done or GLOBAL_UPDATE_COUNTER >= BATCH_SIZE:
                         if info == 'unfinish':
                             buffer_r[-1] += GAMMA * self.ppo.get_v(s_)
                         buffer_return = self.discount(buffer_r, GAMMA)
@@ -557,7 +582,7 @@ class Worker(object):
                         buffer_s, buffer_a, buffer_r, buffer_vpred, buffer_return, buffer_adv = [], [], [], [], [], []
                     
                         QUEUE.put(np.hstack((bs, ba, bret, badv)))          # put data in the queue
-                        if GLOBAL_UPDATE_COUNTER >= MIN_BATCH_SIZE:
+                        if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE:
                             ROLLING_EVENT.clear()       # stop collecting data
                             UPDATE_EVENT.set()          # globalPPO update
 
