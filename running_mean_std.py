@@ -43,6 +43,6 @@ class RunningMeanStd(object):
         n = int(np.prod(self.shape))
         addvec = np.concatenate([x.sum(axis=0).ravel(), np.square(x).sum(axis=0).ravel(), np.array([len(x)],dtype='float64')])
         mean, std, _, _, _ = self.sess.run([self.mean, self.std, self.update_sum, self.update_sumsq, self.update_count], {self.newsum:addvec[0:n].reshape(self.shape), self.newsumsq:addvec[n:2*n].reshape(self.shape), self.newcount:addvec[2*n]})
-        print('mean',mean)
-        print('std', std)
+        # print('mean',mean)
+        # print('std', std)
         # self.incfiltparams(addvec[0:n].reshape(self.shape), addvec[n:2*n].reshape(self.shape), addvec[2*n])

@@ -17,7 +17,7 @@ _bound_y = 1.5
 
 _init_target_dist = 1
 _target_dist = _init_target_dist
-_max_obs_dist = 1
+_max_obs_dist = 0.5
 
 _new_ep_prob = 0
 _modifly_prob = 0.8
@@ -600,7 +600,7 @@ function restore_ep(ep, modifly)
         -- local y_mid = (target_pos[2] + robot_pos[2] )/2    
         -- robot_pos[1] = (math.random() - 0.5) *2 * _target_dist/2 + x_mid
         -- robot_pos[2] = (math.random() - 0.5) *2 * _target_dist/2 + y_mid
-        local modifly_tpye =  math.random(2)
+        local modifly_tpye =  math.random(3)
         if _target_dist ~= _init_target_dist then 
             shift = 0.15
             modifly_tpye = 3
@@ -610,9 +610,9 @@ function restore_ep(ep, modifly)
             local y_mid = (target_pos[2] + robot_pos[2] )/2    
             robot_pos[1] = (math.random() - 0.5) *2 * _target_dist/2 + x_mid
             robot_pos[2] = (math.random() - 0.5) *2 * _target_dist/2 + y_mid
-        -- elseif modifly_tpye == 2 then    
-        --     robot_pos[1] = (math.random() - 0.5) *2 * shift + robot_pos[1]
-        --     robot_pos[2] = (math.random() - 0.5) *2 * shift + robot_pos[2]
+        elseif modifly_tpye == 2 then    
+            robot_pos[1] = (math.random() - 0.5) *2 * shift + robot_pos[1]
+            robot_pos[2] = (math.random() - 0.5) *2 * shift + robot_pos[2]
         else 
             robot_pos[1] = (math.random() - 0.5) *2 * shift + target_pos[1]
             robot_pos[2] = (math.random() - 0.5) *2 * shift + target_pos[2]
