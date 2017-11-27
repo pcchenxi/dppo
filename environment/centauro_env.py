@@ -44,11 +44,11 @@ obstacle_num = 5
 observation_space = map_pixel*map_pixel + 6  # 60 x 60 + 8  2*3 + 2 + 2
 # observation_space = obstacle_num*3 + 2 + 2
 
-action_space = 3 #len(action_list)
+action_space = 5 #len(action_list)
 
 
-REWARD_GOAL = 1
-REWARD_STEP =  -0.1
+REWARD_GOAL = 10
+REWARD_STEP =  -0.01
 REWARD_CRASH = -1 #REWARD_STEP*10
 
 class Simu_env():
@@ -154,13 +154,13 @@ class Simu_env():
                 action = action_list[action]
                 
         self.ep_step += 1
-        a = [0,0,0,0,0]
-        a[0] = action[0]
-        a[1] = action[1] 
-        a[2] = action[2] 
+        # a = [0,0,0,0,0]
+        # a[0] = action[0]
+        # a[1] = action[1] 
+        # a[2] = action[2] 
         
-        if action_space != 5:
-            action = a 
+        # if action_space != 5:
+        #     action = a 
 
         _, _, _, _, found_pose = self.call_sim_function('centauro', 'step', action)
 
@@ -205,10 +205,10 @@ class Simu_env():
         obs_reward = 0
 
         dist = robot_state[0]
-        target_reward = -(dist - self.dist_pre)/0.1 * REWARD_STEP
+        target_reward = -(dist - self.dist_pre)/0.1 * 0.1
         # target_reward = target_reward/(self.max_length*4)
-        if target_reward < 0:
-            target_reward = 0
+        # if target_reward < 0:
+        #     target_reward = 0
 
         # target_reward = 1 - target_reward
 
@@ -236,15 +236,15 @@ class Simu_env():
         # print(obs_count)
 
         if found_pose == bytearray(b"a"):       # when collision or no pose can be found
-            # is_finish = True
-            event_reward = -dist/200 * 10
+            is_finish = True
+            event_reward = REWARD_CRASH
             # print('crash a')
             # reward = reward*10       
             info = 'crash'
 
         if found_pose == bytearray(b"c"):       # when collision or no pose can be found
-            # is_finish = True
-            event_reward = -dist/200 * 10
+            is_finish = True
+            event_reward = REWARD_CRASH
             # print('crash')
             # reward = reward * 10
             info = 'crash'
@@ -252,38 +252,31 @@ class Simu_env():
         # if np.count_nonzero(action) == 0:
             # event_reward = REWARD_CRASH
 
-        if dist < 0.1: # and diff_l < 0.02:
-            # is_finish = True
+        if dist < 0.1 and info != 'crash': # and diff_l < 0.02:
+            is_finish = True
             event_reward = REWARD_GOAL #self.total_ep_reward
             info = 'goal'
             # print('goal')
 
-        if dist > 2: # out of boundary
+        if dist > 1.2: # out of boundary
             is_finish = True
-            # event_reward = -REWARD_GOAL
+            event_reward = -REWARD_GOAL
             info = 'out'
             # print('outof bound', robot_state[1])
 
-        if self.ep_step >= self.step_size:
-            is_finish = True
-            # print(self.ep_step, self.step_size)
-            # event_reward = np.exp(-dist)*REWARD_GOAL/2
-            info = 'nostep'
-            # print('no step', self.ep_step)
+        # if self.ep_step >= self.step_size:
+        #     is_finish = True
+        #     # print(self.ep_step, self.step_size)
+        #     # event_reward = np.exp(-dist)*REWARD_GOAL/2
+        #     info = 'nostep'
+        #     # print('no step', self.ep_step)
 
-        if is_finish:
-            self.ep_step = 0
+        # if is_finish:
+        #     self.ep_step = 0
 
         # reward = REWARD_STEP + REWARD_STEP*np.square(action).sum()
         # reward = reward * (1 + diff_l + diff_h)
         # reward = reward * target_reward
-
-        # reward = REWARD_STEP*(1+max(diff_l, diff_h)) + event_reward
-        # reward = target_reward + event_reward
-        # if info == 'goal':
-        #     reward = REWARD_GOAL
-
-        # print(reward)
 
         # t = 50
         # # is_finish = False        
@@ -300,7 +293,8 @@ class Simu_env():
         #     self.goal_counter = 0
         #     self.goal_reached = False
 
-        reward = event_reward - dist/200
+        reward = event_reward + target_reward
+
         return reward, min_dist, obs_count, is_finish, info
 
     ####################################  interface funcytion  ###################################

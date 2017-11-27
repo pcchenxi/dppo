@@ -20,7 +20,7 @@ _target_dist = _init_target_dist
 _max_obs_dist = 0.5
 
 _new_ep_prob = 0
-_modifly_prob = 0.8
+_modifly_prob = 0
 
 function start()
     -- sleep (3)
@@ -57,7 +57,7 @@ function start()
 
     _failed_ep_index = 1
     _failed_ep_history = {}
-    _max_history_length = 200
+    _max_history_length = 1000
     _min_history_length = 0 --_max_history_length/4
     _sampl_node = 'new'
     _save_ep = false
@@ -111,7 +111,7 @@ function reset(inInts,inFloats,inStrings,inBuffer)
     -- print ('reset', env_mode, reset_mode)
 
     if reset_mode == 4 then 
-        _target_dist = 0.15
+        _target_dist = 0.0
     else 
         _target_dist = _init_target_dist
     end
@@ -548,7 +548,7 @@ end
 function restore_ep(ep, modifly)
     local episode = copy_table(ep) 
 
-    local shift = 0.3
+    local shift = 0.2
     local robot_shift = 0.1
     local hds = episode[1]
     local params = episode[2]
@@ -602,7 +602,7 @@ function restore_ep(ep, modifly)
         -- robot_pos[2] = (math.random() - 0.5) *2 * _target_dist/2 + y_mid
         local modifly_tpye =  math.random(3)
         if _target_dist ~= _init_target_dist then 
-            shift = 0.15
+            shift = 0.0
             modifly_tpye = 3
         end        
         if modifly_tpye == 1 then 
