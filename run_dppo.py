@@ -16,8 +16,7 @@ GAMMA = 0.9                 # reward discount factor
 LAM = 0.95
 A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0002               # learning rate for critic
-LR = 0.001
-LR_demo = 0.01
+LR = 0.0001
 
 # DEMO_MODE = True
 MODE = ['demo', 'follow', 'test']
@@ -93,13 +92,8 @@ class PPO(object):
         self.closs = tf.reduce_mean(tf.square(self.advantage))
         self.ctrain_op = tf.train.AdamOptimizer(C_LR).minimize(self.closs)
 
-
         self.total_loss = self.aloss + self.closs
         self.train_op = tf.train.AdamOptimizer(LR).minimize(self.total_loss)
-
-        a_diff = self.tfa - pi.loc
-        self.demo_loss = tf.reduce_mean(tf.square(a_diff))
-        self.train_demo_op = tf.train.AdamOptimizer(LR_demo).minimize(self.demo_loss)
 
         self.sess.run(tf.global_variables_initializer())
 
@@ -135,12 +129,9 @@ class PPO(object):
         return s_shuf, a_shuf, r_shuf, adv_shuf
 
     def update(self):
-        global GLOBAL_UPDATE_COUNTER, G_ITERATION, MODE_INDEX
+        global GLOBAL_UPDATE_COUNTER, G_ITERATION
         while not COORD.should_stop():
             UPDATE_EVENT.wait()                     # wait until get batch of data
-
-            if MODE[MODE_INDEX] == 'demo':
-                self.sess.run(self.restorepi_op)
 
             self.sess.run(self.update_oldpi_op)     # copy pi to old pi
             data = [QUEUE.get() for _ in range(QUEUE.qsize())]      # collect data from all workers
@@ -186,10 +177,7 @@ class PPO(object):
                     }
                     # st = self.sess.run(self.aloss, feed_dict = feed_dict)
 
-                    if MODE[MODE_INDEX] == 'demo':
-                        tloss, aloss, vloss, entropy, _ = self.sess.run([self.demo_loss, self.aloss, self.closs, self.entropy, self.train_demo_op], feed_dict = feed_dict)
-                    else:
-                        tloss, aloss, vloss, entropy, _ = self.sess.run([self.total_loss, self.aloss, self.closs, self.entropy, self.train_op], feed_dict = feed_dict)
+                    tloss, aloss, vloss, entropy, _ = self.sess.run([self.total_loss, self.aloss, self.closs, self.entropy, self.train_op], feed_dict = feed_dict)
                     
                     tloss_sum += tloss
                     aloss_sum += aloss 
@@ -208,22 +196,19 @@ class PPO(object):
             print('-------------------------------------------------------------------------------')
             print("aloss: %7.4f|, vloss: %7.4f| entropy: %7.4f" % (aloss, vloss, np.mean(entropy)))
 
-            if MODE[MODE_INDEX] != False:
-                self.write_summary('Loss/entropy', np.mean(entropy))  
-                self.write_summary('Loss/a loss', aloss) 
-                self.write_summary('Loss/v loss', vloss) 
-                self.write_summary('Loss/t loss', tloss) 
-                self.write_summary('Perf/mean_reward', np.mean(reward))  
 
-                self.saver.save(self.sess, './model/rl/model.cptk') 
+            self.write_summary('Loss/entropy', np.mean(entropy))  
+            self.write_summary('Loss/a loss', aloss) 
+            self.write_summary('Loss/v loss', vloss) 
+            self.write_summary('Loss/t loss', tloss) 
+            self.write_summary('Perf/mean_reward', np.mean(reward))  
+
+            self.saver.save(self.sess, './model/rl/model.cptk') 
 
             UPDATE_EVENT.clear()        # updating finished
             GLOBAL_UPDATE_COUNTER = 0   # reset counter
             G_ITERATION += 1
             ROLLING_EVENT.set()         # set roll-out available
-
-            MODE_INDEX = (MODE_INDEX+1)%len(MODE)
-            print('------------------------', MODE[MODE_INDEX], 'mode', '------------------------')
                 
 
     def _build_feature_net(self, name, input_state, trainable):
@@ -348,7 +333,7 @@ class Worker(object):
         global GLOBAL_EP, GLOBAL_RUNNING_R, GLOBAL_UPDATE_COUNTER \
             , Goal_states, Goal_count, Goal_return, Goal_buffer_full \
             , Crash_states, Crash_count, Crash_return, Crash_buffer_full \
-            , History_states, History_count, History_adv, History_return, History_buffer_full, DEMO_MODE
+            , History_states, History_count, History_adv, History_return, History_buffer_full
 
         self.env.save_ep()
         s = self.env.reset(EP_LEN, 0, 1, 0)
@@ -358,21 +343,18 @@ class Worker(object):
             buffer_s, buffer_a, buffer_r, buffer_vpred, buffer_return, buffer_adv, buffer_aprob = [], [], [], [], [], [], []
             ep_count += 1
             ep_step = 0
-            a_demo = np.array([-1, 0, 0])
+            a_demo = np.array([-1, 0, 0, 0, 0])
             info = 'unfinish'
-            if MODE[MODE_INDEX] == 'demo':
-            # if ep_count%4 == 0:
+            if ep_count%4 == 0:
                 s = self.env.reset(EP_LEN, 0, 4, 0)
                 ep_length = int(EP_LEN)
-                # DEMO_MODE = True
-                # print('start',s[-6:])
+                DEMO_MODE = True
                 ep_batch_size = BATCH_SIZE
             else:
                 s = self.env.reset(EP_LEN, 0, 1, 0)
                 ep_length = EP_LEN
                 ep_batch_size = BATCH_SIZE * 2
-                if MODE[MODE_INDEX] == 'test':
-                    self.env.clear_history_leave_one()
+                DEMO_MODE = False
             t = 0
             while(1):
                 if not ROLLING_EVENT.is_set():                  # while global PPO is updating
@@ -381,29 +363,36 @@ class Worker(object):
                     buffer_s, buffer_a, buffer_r, buffer_vpred, buffer_return, buffer_adv = [], [], [], [], [], []
                     break
 
-                if MODE[MODE_INDEX] == 'demo':
+                if DEMO_MODE:
                     # a = np.random.randint(A_DIM, size=1)
                     # a = a[0]
-                    if info == 'crash' or np.random.rand() > 0.7:
+                    if np.random.rand() > 0.7:
                         a = np.random.rand(A_DIM)
                         a = (a-0.5)*2
+                    elif info == 'crash':
+                        s_demo = s*1
+                        s_demo[-5] = -s_demo[-5]
+                        s_demo[-6] = -s_demo[-6]
+                        a = self.ppo.choose_action(s)
                     else:
                         a = a_demo
                     # print('demo action', a)
                 else:
-                    a = self.ppo.choose_action(s, )
+                    a = self.ppo.choose_action(s)
                 
                 s_, r, done, info = self.env.step(a)
                 vpred = self.ppo.get_v(s)
 
-                if MODE[MODE_INDEX] == 'demo' and (info == 'goal' or info == 'crash'):
+                if DEMO_MODE and (info == 'goal' or info == 'crash'):
                     done = False
+
+                print(s[-7:])
                 # if self.wid == 0:
                 #     vpred_ = self.ppo.get_v(s_)
                 #     td = r + GAMMA*vpred_ - vpred
                 #     print("r: %7.4f| vpred: %7.4f| v_next: %7.4f| TD: %7.4f| " %(r, vpred, vpred_, td))
 
-                if MODE[MODE_INDEX] != 'demo' or (MODE[MODE_INDEX]=='demo' and info != 'crash'):
+                if DEMO_MODE == False or (DEMO_MODE and info != 'crash'):
                     buffer_s.append(s*1)
                     buffer_a.append(a)
                     buffer_r.append(r)                    # normalize reward, find to be useful
@@ -418,7 +407,7 @@ class Worker(object):
                 
                 
                 if done or GLOBAL_UPDATE_COUNTER >= ep_batch_size or t == ep_length-1:
-                    if MODE[MODE_INDEX] == 'demo':
+                    if DEMO_MODE:
                         buffer_s, buffer_a, buffer_r, buffer_vpred, buffer_aprob, s_ = self.process_demo_path(buffer_a, s_demo)
                         # print('start',s_[-6:])
                     # if DEMO_MODE == False and (info == 'unfinish' or info == 'nostep'):
@@ -436,7 +425,7 @@ class Worker(object):
                 
                     QUEUE.put(np.hstack((bs, ba, bret, brew, badv)))          # put data in the queue
                     if GLOBAL_UPDATE_COUNTER >= ep_batch_size:
-                        if MODE[MODE_INDEX] != 'demo':
+                        if DEMO_MODE == False:
                             self.env.clear_history_leave_one()
 
                         ROLLING_EVENT.clear()       # stop collecting data
@@ -446,10 +435,10 @@ class Worker(object):
                         COORD.request_stop()
                         break
 
-                    if MODE[MODE_INDEX] != 'demo' and (info == 'goal' or info == 'out' or t == ep_length-1):
+                    if DEMO_MODE == False and (info == 'goal' or info == 'out' or t == ep_length-1):
                         break 
 
-                    if MODE[MODE_INDEX] == 'demo' and (info == 'out' or t == ep_length-1):
+                    if DEMO_MODE and (info == 'out' or t == ep_length-1):
                         break 
 
             GLOBAL_EP += 1
