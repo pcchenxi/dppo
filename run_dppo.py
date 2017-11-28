@@ -11,15 +11,15 @@ import matplotlib.pyplot as plt
 
 EP_MAX = 500000
 EP_LEN = 100
-N_WORKER = 7               # parallel workers
+N_WORKER = 1               # parallel workers
 GAMMA = 0.9                 # reward discount factor
 LAM = 0.95
 A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0002               # learning rate for critic
-LR = 0.0001
+LR = 0.001
 
-BATCH_SIZE = 2048
-MIN_BATCH_SIZE = 256       # minimum batch size for updating PPO
+BATCH_SIZE = 128
+MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
@@ -113,11 +113,11 @@ class PPO(object):
             # s, a, r, adv = data[:, :S_DIM], data[:, S_DIM: S_DIM + A_DIM], data[:, S_DIM + A_DIM: S_DIM + A_DIM + 1], data[:, -1:]
             s, a, r, reward, adv = data[:, :S_DIM], data[:, S_DIM: S_DIM + A_DIM], data[:, S_DIM + A_DIM: S_DIM + A_DIM+1], data[:, S_DIM + A_DIM+1: S_DIM + A_DIM+2], data[:, -1:]
             self.ob_rms.update(s)
-            adv = self.sess.run(self.advantage, {self.tfs: s, self.tfdc_r: r})
+            # adv = self.sess.run(self.advantage, {self.tfs: s, self.tfdc_r: r})
 
-            if adv.std() != 0:                
-                adv = (adv - adv.mean())/adv.std()
-                print('adv min max', adv.mean(), adv.min(), adv.max())
+            # if adv.std() != 0:                
+            #     adv = (adv - adv.mean())/adv.std()
+            #     print('adv min max', adv.mean(), adv.min(), adv.max())
 
             # for i in range(len(r)):
             #     print(a[i], 'ret', r[i], 'adv', adv[i], reward[i])
@@ -135,8 +135,10 @@ class PPO(object):
                 count = 0
                 for start in range(0, len(r), MIN_BATCH_SIZE):
                     end = start + MIN_BATCH_SIZE
-                    if end > len(r) - 1:
+                    if end > len(r) - 1 and count != 0:
                         break
+                    if  end > len(r) - 1 and count == 0:
+                        end = len(r)-1
                     count += 1
                     sub_s = s[start:end]
                     sub_a = a[start:end]
@@ -212,11 +214,11 @@ class PPO(object):
             x = tf.layers.dense(ob_grid, 50, tf.nn.tanh, kernel_initializer=w_init, name='x_fc1', trainable=trainable )
             x = tf.layers.dense(x, 25, tf.nn.tanh, kernel_initializer=w_init, name='x_fc2', trainable=trainable )
 
-            # process state
-            state_rt = tf.layers.dense(ob_state, state_size*5, tf.nn.tanh, kernel_initializer=w_init, name='rt_fc1', trainable=trainable )
-            state_rt = tf.layers.dense(state_rt, state_size*3, tf.nn.tanh, name='rt_fc2', trainable=trainable )
+            # # process state
+            # state_rt = tf.layers.dense(ob_state, state_size*5, tf.nn.tanh, kernel_initializer=w_init, name='rt_fc1', trainable=trainable )
+            # state_rt = tf.layers.dense(state_rt, state_size*3, tf.nn.tanh, name='rt_fc2', trainable=trainable )
             
-            feature = tf.concat([x , state_rt], 1, name = 'concat')
+            feature = tf.concat([x , ob_state], 1, name = 'concat')
             # feature = state_rt
             feature = tf.layers.dense(feature, 50, tf.nn.tanh, name='feature_fc', trainable=trainable )
             feature = tf.layers.dense(feature, 50, tf.nn.tanh, name='feature_fc2', trainable=trainable )
@@ -317,24 +319,26 @@ class Worker(object):
             buffer_s, buffer_a, buffer_r, buffer_vpred, buffer_return, buffer_adv, buffer_aprob = [], [], [], [], [], [], []
             ep_count += 1
             ep_step = 0
-            a_demo = np.array([-1, 0, 0, 0, 0])
+            a_demo = np.random.rand(A_DIM)# np.array([-1, 0, 0, 0, 0])
+            a_demo[3] = 0
+            a_demo[4] = 0
             info = 'unfinish'
-            if ep_count%10 == 0:
-                self.env.clear_history()
-                self.env.reset(EP_LEN, 0, 0, 0)
-                self.env.save_ep()
+            # if ep_count%10 == 0:
+            #     self.env.clear_history()
+            #     self.env.reset(EP_LEN, 0, 0, 0)
+            #     self.env.save_ep()
 
-            if ep_count%4 == 0:
-                s = self.env.reset(EP_LEN, 0, 4, 0)
-                ep_length = int(EP_LEN)
-                DEMO_MODE = True
-                self.env.clear_history_leave_one()
-                ep_batch_size = BATCH_SIZE
-            else:
-                s = self.env.reset(EP_LEN, 0, 1, 0)
-                ep_length = EP_LEN
-                ep_batch_size = BATCH_SIZE
-                DEMO_MODE = False
+            # if ep_count%4 == 0 and False:
+            #     s = self.env.reset(EP_LEN, 0, 4, 0)
+            #     ep_length = int(EP_LEN)
+            #     DEMO_MODE = True
+            #     self.env.clear_history_leave_one()
+            #     ep_batch_size = BATCH_SIZE
+            # else:
+            s = self.env.reset(EP_LEN, 0, 1, 0)
+            ep_length = EP_LEN
+            ep_batch_size = BATCH_SIZE
+            DEMO_MODE = False
             t = 0
             while(1):
                 if not ROLLING_EVENT.is_set():                  # while global PPO is updating
@@ -346,14 +350,14 @@ class Worker(object):
                 if DEMO_MODE:
                     # a = np.random.randint(A_DIM, size=1)
                     # a = a[0]
-                    if np.random.rand() > 0.7:
+                    if info == 'crash' or np.random.rand() > 0.5:
                         a = np.random.rand(A_DIM)
                         a = (a-0.5)*2
-                    elif info == 'crash':
-                        s_demo = s*1
-                        s_demo[-5] = -s_demo[-5]
-                        s_demo[-6] = -s_demo[-6]
-                        a = self.ppo.choose_action(s)
+                    # elif info == 'crash':
+                    #     s_demo = s*1
+                    #     s_demo[-5] = -s_demo[-5]
+                    #     s_demo[-6] = -s_demo[-6]
+                    #     a = self.ppo.choose_action(s)
                     else:
                         a = a_demo
                     # print('demo action', a)
@@ -403,6 +407,7 @@ class Worker(object):
                     #     print(buffer_a[i], 'ret', buffer_return[i], 'pred', buffer_vpred[i], 'adv', buffer_adv[i], buffer_r[i])
                     # print(DEMO_MODE, info)
 
+                    buffer_r[-1] -= GAMMA * self.ppo.get_v(s_)
                     bs, ba, bret, brew, badv = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return)[:, np.newaxis], np.array(buffer_r)[:, np.newaxis], np.array(buffer_adv)[:, np.newaxis]
 
                     buffer_s, buffer_a, buffer_r, buffer_vpred, buffer_return, buffer_adv = [], [], [], [], [], []

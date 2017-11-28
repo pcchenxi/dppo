@@ -17,10 +17,9 @@ _bound_y = 1.5
 
 _init_target_dist = 1
 _target_dist = _init_target_dist
-_max_obs_dist = 0.5
 
 _new_ep_prob = 0
-_modifly_prob = 0.6
+_modifly_prob = 0.9
 
 function start()
     -- sleep (3)
@@ -39,6 +38,7 @@ function start()
     _start_t_pos = simGetObjectPosition(_target_hd, -1)
     _start_t_pos[3] = _start_t_pos[3] + 0.35
     _start_t_ori = simGetObjectOrientation(_target_hd,-1)
+    _start_l = get_current_l(_robot_hd)
 
     _collection_hd = simGetCollectionHandle('obstacle_all')
     _collection_robot_hd = simGetCollectionHandle('centauro_mesh')
@@ -255,7 +255,7 @@ function get_robot_state(inInts,inFloats,inStrings,inBuffer)
     end
     state[#state+1] = ori[3]
     state[#state+1] = pos[3]
-    state[#state+1] = leg_l
+    state[#state+1] = leg_l - _start_l
 
     local threshold = 0.3
     local res, data = simCheckDistance(_collection_robot_hd, _collection_hd, threshold)

@@ -47,7 +47,7 @@ observation_space = map_pixel*map_pixel + 6  # 60 x 60 + 8  2*3 + 2 + 2
 action_space = 5 #len(action_list)
 
 
-REWARD_GOAL = 1
+REWARD_GOAL = 100
 REWARD_STEP =  -0.01
 REWARD_CRASH = -1 #REWARD_STEP*10
 
@@ -202,19 +202,20 @@ class Simu_env():
         diff_h = abs(robot_h)
 
         min_dist = robot_state[-1]
-        obs_reward = 0
+
+        off_pose = 1 - max(diff_l, diff_h)/0.2
+        obs_reward = min_dist/0.3
 
         dist = robot_state[0]
-        target_reward = -(dist - self.dist_pre)/0.1 * 0.1
+        target_reward = -(dist - self.dist_pre)/0.1
         # target_reward = target_reward/(self.max_length*4)
-        # if target_reward < 0:
-        #     target_reward = 0
+        if target_reward < 0:
+            target_reward = 0
 
         # target_reward = 1 - target_reward
 
         # action_reward = -0.0005 * np.square(action[-2:]).sum()
 
-        # obs_reward = (min_dist - self.min_obsdist_pre)
         # target_reward = -(dist - self.dist_pre) * 5
 
         self.dist_pre = dist
@@ -253,7 +254,7 @@ class Simu_env():
             # event_reward = REWARD_CRASH
 
         if dist < 0.1 and info != 'crash': # and diff_l < 0.02:
-            # is_finish = True
+            is_finish = True
             event_reward = REWARD_GOAL #self.total_ep_reward
             info = 'goal'
             # print('goal')
@@ -292,9 +293,15 @@ class Simu_env():
         # elif dist > 0.1:
         #     self.goal_counter = 0
         #     self.goal_reached = False
+        if event_reward != 0:
+            reward = event_reward
+        else:
+            if min_dist > 0.3:
+                reward = target_reward + 0.5*off_pose #event_reward #+ target_reward - dist/200
+            else:
+                reward = target_reward + 0.5*obs_reward
 
-        reward = event_reward + target_reward - dist/200
-
+        print(reward, min_dist)
         return reward, min_dist, obs_count, is_finish, info
 
     ####################################  interface funcytion  ###################################
