@@ -18,8 +18,8 @@ A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0002               # learning rate for critic
 LR = 0.0001
 
-BATCH_SIZE = 1024
-MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
+BATCH_SIZE = 2048
+MIN_BATCH_SIZE = 256       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
@@ -388,7 +388,11 @@ class Worker(object):
                 
                 if done or GLOBAL_UPDATE_COUNTER >= ep_batch_size or t == ep_length-1:
                     if DEMO_MODE:
-                        buffer_s, buffer_a, buffer_r, buffer_vpred, buffer_aprob, s_ = self.process_demo_path(buffer_a, s_demo)
+                        if len(buffer_a) == 0:
+                            buffer_s, buffer_a, buffer_r, buffer_vpred, buffer_return, buffer_adv = [], [], [], [], [], []
+                            break
+                        else:
+                            buffer_s, buffer_a, buffer_r, buffer_vpred, buffer_aprob, s_ = self.process_demo_path(buffer_a, s_demo)
                         # print('start',s_[-6:])
                     # if DEMO_MODE == False and (info == 'unfinish' or info == 'nostep'):
                     buffer_r[-1] += GAMMA * self.ppo.get_v(s_)

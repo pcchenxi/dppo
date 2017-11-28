@@ -259,7 +259,7 @@ class Simu_env():
             # print('goal')
 
         if dist > 1.2: # out of boundary
-            # is_finish = True
+            is_finish = True
             event_reward = -REWARD_GOAL
             info = 'out'
             # print('outof bound', robot_state[1])
