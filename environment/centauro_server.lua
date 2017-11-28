@@ -20,7 +20,7 @@ _target_dist = _init_target_dist
 _max_obs_dist = 0.5
 
 _new_ep_prob = 0
-_modifly_prob = 0
+_modifly_prob = 0.6
 
 function start()
     -- sleep (3)
@@ -604,6 +604,7 @@ function restore_ep(ep, modifly)
         if _target_dist ~= _init_target_dist then 
             shift = 0.0
             modifly_tpye = 3
+            robot_joints = _start_joint_values
         end        
         if modifly_tpye == 1 then 
             local x_mid = (target_pos[1] + robot_pos[1] )/2

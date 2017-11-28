@@ -47,7 +47,7 @@ observation_space = map_pixel*map_pixel + 6  # 60 x 60 + 8  2*3 + 2 + 2
 action_space = 5 #len(action_list)
 
 
-REWARD_GOAL = 10
+REWARD_GOAL = 1
 REWARD_STEP =  -0.01
 REWARD_CRASH = -1 #REWARD_STEP*10
 
@@ -236,14 +236,14 @@ class Simu_env():
         # print(obs_count)
 
         if found_pose == bytearray(b"a"):       # when collision or no pose can be found
-            is_finish = True
+            # is_finish = True
             event_reward = REWARD_CRASH
             # print('crash a')
             # reward = reward*10       
             info = 'crash'
 
         if found_pose == bytearray(b"c"):       # when collision or no pose can be found
-            is_finish = True
+            # is_finish = True
             event_reward = REWARD_CRASH
             # print('crash')
             # reward = reward * 10
@@ -253,13 +253,13 @@ class Simu_env():
             # event_reward = REWARD_CRASH
 
         if dist < 0.1 and info != 'crash': # and diff_l < 0.02:
-            is_finish = True
+            # is_finish = True
             event_reward = REWARD_GOAL #self.total_ep_reward
             info = 'goal'
             # print('goal')
 
         if dist > 1.2: # out of boundary
-            is_finish = True
+            # is_finish = True
             event_reward = -REWARD_GOAL
             info = 'out'
             # print('outof bound', robot_state[1])
@@ -293,7 +293,7 @@ class Simu_env():
         #     self.goal_counter = 0
         #     self.goal_reached = False
 
-        reward = event_reward + target_reward
+        reward = event_reward + target_reward - dist/200
 
         return reward, min_dist, obs_count, is_finish, info
 

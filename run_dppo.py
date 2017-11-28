@@ -9,20 +9,16 @@ import math
 import time
 import matplotlib.pyplot as plt
 
-EP_MAX = 5000
-EP_LEN = 50
-N_WORKER = 1               # parallel workers
+EP_MAX = 500000
+EP_LEN = 100
+N_WORKER = 7               # parallel workers
 GAMMA = 0.9                 # reward discount factor
 LAM = 0.95
 A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0002               # learning rate for critic
 LR = 0.0001
 
-# DEMO_MODE = True
-MODE = ['demo', 'follow', 'test']
-MODE_INDEX = 0
-
-BATCH_SIZE = 256
+BATCH_SIZE = 1024
 MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
@@ -31,28 +27,6 @@ GAME = 'Pendulum-v0'
 S_DIM, A_DIM = centauro_env.observation_space, centauro_env.action_space 
 
 G_ITERATION = 0
-
-Goal_states = []
-Goal_return = []
-Goal_step = 60
-Goal_count = 0
-Goal_buffer_full = False 
-
-Crash_states = []
-Crash_return = []
-Crash_step = 20
-Crash_count = 0
-Crash_buffer_full = False 
-
-RP_buffer_size = MIN_BATCH_SIZE * 10
-
-History_states = []
-History_adv = []
-History_return = []
-History_count = 0
-History_buffer_full = False
-History_buffer_size = MIN_BATCH_SIZE * 10
-
 
 class PPO(object):
     def __init__(self):
@@ -345,15 +319,21 @@ class Worker(object):
             ep_step = 0
             a_demo = np.array([-1, 0, 0, 0, 0])
             info = 'unfinish'
+            if ep_count%10 == 0:
+                self.env.clear_history()
+                self.env.reset(EP_LEN, 0, 0, 0)
+                self.env.save_ep()
+
             if ep_count%4 == 0:
                 s = self.env.reset(EP_LEN, 0, 4, 0)
                 ep_length = int(EP_LEN)
                 DEMO_MODE = True
+                self.env.clear_history_leave_one()
                 ep_batch_size = BATCH_SIZE
             else:
                 s = self.env.reset(EP_LEN, 0, 1, 0)
                 ep_length = EP_LEN
-                ep_batch_size = BATCH_SIZE * 2
+                ep_batch_size = BATCH_SIZE
                 DEMO_MODE = False
             t = 0
             while(1):
@@ -386,7 +366,7 @@ class Worker(object):
                 if DEMO_MODE and (info == 'goal' or info == 'crash'):
                     done = False
 
-                print(s[-7:])
+                # print(s[-7:])
                 # if self.wid == 0:
                 #     vpred_ = self.ppo.get_v(s_)
                 #     td = r + GAMMA*vpred_ - vpred
