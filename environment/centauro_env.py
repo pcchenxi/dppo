@@ -47,7 +47,7 @@ observation_space = map_pixel*map_pixel + 6  # 60 x 60 + 8  2*3 + 2 + 2
 action_space = 5 #len(action_list)
 
 
-REWARD_GOAL = 100
+REWARD_GOAL = 1
 REWARD_STEP =  -0.01
 REWARD_CRASH = -1 #REWARD_STEP*10
 
@@ -138,7 +138,7 @@ class Simu_env():
         self.state_pre = []
         res, retInts, retFloats, retStrings, retBuffer = self.call_sim_function('centauro', 'reset', [observation_range*2, env_mode, reset_mode, save_ep])        
         # state, reward, min_dist, obs_count, is_finish, info = self.step([0, 0, 0, 0, 0])
-        state, reward, is_finish, info = self.step([0, 0, 0, 0, 0])
+        state, reward, event_reward,is_finish, info = self.step([0, 0, 0, 0, 0])
 
         # print('after reset', self.dist_pre)
         self.ep_init = False        
@@ -154,13 +154,13 @@ class Simu_env():
                 action = action_list[action]
                 
         self.ep_step += 1
-        # a = [0,0,0,0,0]
-        # a[0] = action[0]
-        # a[1] = action[1] 
-        # a[2] = action[2] 
+        a = [0,0,0,0,0]
+        a[0] = action[0]
+        a[1] = action[1] 
+        a[2] = action[2] 
         
-        # if action_space != 5:
-        #     action = a 
+        if action_space != 5:
+            action = a 
 
         _, _, _, _, found_pose = self.call_sim_function('centauro', 'step', action)
 
@@ -178,12 +178,12 @@ class Simu_env():
         # plt.pause(0.01)
 
         #compute reward and is_finish
-        reward, min_dist, obs_count, is_finish, info = self.compute_reward(robot_state, action, found_pose)
+        reward, event_reward, obs_count, is_finish, info = self.compute_reward(robot_state, action, found_pose)
 
         state_ = self.convert_state(robot_state)
 
         # return state_, reward, min_dist, obs_count, is_finish, info
-        return state_, reward, is_finish, info
+        return state_, reward, event_reward, is_finish, info
 
     def compute_reward(self, robot_state, action, found_pose):
         # 0,  1,  2,      3,  4,  5              -5,    -4, -3, -2, -1 
@@ -203,14 +203,16 @@ class Simu_env():
 
         min_dist = robot_state[-1]
 
-        off_pose = 1 - max(diff_l, diff_h)/0.2
+        off_pose = 1 - max(diff_l, diff_h)/0.15
+        if off_pose < 0:
+            off_pose = 0
         obs_reward = min_dist/0.3
 
         dist = robot_state[0]
         target_reward = -(dist - self.dist_pre)/0.1
         # target_reward = target_reward/(self.max_length*4)
-        if target_reward < 0:
-            target_reward = 0
+        # if target_reward < 0:
+        #     target_reward = 0
 
         # target_reward = 1 - target_reward
 
@@ -238,14 +240,14 @@ class Simu_env():
 
         if found_pose == bytearray(b"a"):       # when collision or no pose can be found
             # is_finish = True
-            event_reward = REWARD_CRASH
+            # event_reward = REWARD_CRASH
             # print('crash a')
             # reward = reward*10       
             info = 'crash'
 
         if found_pose == bytearray(b"c"):       # when collision or no pose can be found
             # is_finish = True
-            event_reward = REWARD_CRASH
+            # event_reward = REWARD_CRASH
             # print('crash')
             # reward = reward * 10
             info = 'crash'
@@ -293,16 +295,19 @@ class Simu_env():
         # elif dist > 0.1:
         #     self.goal_counter = 0
         #     self.goal_reached = False
-        if event_reward != 0:
-            reward = event_reward
-        else:
-            if min_dist > 0.3:
-                reward = target_reward + 0.5*off_pose #event_reward #+ target_reward - dist/200
-            else:
-                reward = target_reward + 0.5*obs_reward
 
-        print(reward, min_dist)
-        return reward, min_dist, obs_count, is_finish, info
+
+        if min_dist > 0.3:
+            reward = off_pose #event_reward #+ target_reward - dist/200
+        else:
+            reward = obs_reward
+
+        if info == 'crash':
+            reward = REWARD_CRASH
+
+        event_reward += target_reward
+        # print(reward, min_dist)
+        return reward, event_reward, obs_count, is_finish, info
 
     ####################################  interface funcytion  ###################################
     def save_ep(self):
