@@ -50,6 +50,7 @@ function start()
 
     _obs_hds = check_avaiable_obstacle_hds()
 
+    _current_tra = {}
     _current_ep = {}
     _pre_ep = {}
     _start_ep = {}
@@ -106,7 +107,8 @@ end
 function reset(inInts,inFloats,inStrings,inBuffer)
     local radius = inFloats[1]
     local env_mode = inFloats[2] --   0: random environment   1: target environment 
-    local reset_mode = inFloats[3] --   0: pure random ep        1: allow replay buffer    2: continue... only change target position   3: play by user  4: close to goal
+    local reset_mode = inFloats[3] 
+    --   0: pure random ep        1: allow replay buffer    2: continue... only change target position   3: play by user  4: close to goal  5: after collide 
     _g_save_ep = inFloats[4]
     -- print ('reset', env_mode, reset_mode)
 
@@ -125,7 +127,11 @@ function reset(inInts,inFloats,inStrings,inBuffer)
     end
     local robot_pos = simGetObjectPosition(_robot_hd, -1)
     _center_x = robot_pos[1]
-    _center_y = robot_pos[2]         
+    _center_y = robot_pos[2]   
+
+    _current_ep = convert_current_ep()
+    _current_tra = {}      
+    _current_tra[1] = _current_ep
     return {}, {}, {}, ''
 end
 
@@ -134,6 +140,7 @@ function step(inInts,inFloats,inStrings,inBuffer)
     _pre_ep = convert_current_ep()
     res = do_action_rl(_robot_hd, inFloats)
     _current_ep = convert_current_ep()
+    _current_tra[#_current_tra+1] = _current_ep
     return {}, {}, {}, res
 end
 
@@ -702,6 +709,17 @@ function sample_ep(radius, reset_mode)  -- sample small training case: robot in 
     local sample_type = math.random()
     if reset_mode == 3 then
         restore_ep(_current_ep, 0) 
+    elseif reset_mode == 5 then 
+        local index = #_current_tra - 3
+
+        if index < 1 then
+            index = 1
+        end 
+        restore_ep(_current_tra[index], 0) 
+        _sampl_node = 'retry'
+    elseif reset_mode == 6 then 
+        restore_ep(_current_tra[1], 0) 
+        _sampl_node = 'retry'
     elseif sample_type > _new_ep_prob and #_failed_ep_history > _min_history_length and (reset_mode == 1 or reset_mode == 4) then       -- restore failure ep
         _sampl_node = 'replay'
 

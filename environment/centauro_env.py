@@ -16,20 +16,20 @@ action_list = []
 for x in range(-1, 2):
     for y in range(-1, 2):
         for w in range(-1, 2):
-            # for h in range(-1, 2):
-            #     for l in range(-1, 2):
-            action = []
-            action.append(x)
-            action.append(y)
-            action.append(w)
-            action.append(0)
-            action.append(0)
+            for h in range(-1, 2):
+                for l in range(-1, 2):
+                    action = []
+                    action.append(x)
+                    action.append(y)
+                    action.append(w)
+                    action.append(h)
+                    action.append(l)
 
-            if np.count_nonzero(action) == 0:
-                continue 
+                    if np.count_nonzero(action) == 0:
+                        continue 
 
-            action_list.append(action)
-            # print action_list
+                    action_list.append(action)
+                    # print action_list
 
 observation_range = 1.5
 
@@ -44,12 +44,13 @@ obstacle_num = 5
 observation_space = map_pixel*map_pixel + 6  # 60 x 60 + 8  2*3 + 2 + 2
 # observation_space = obstacle_num*3 + 2 + 2
 
-action_space = 5 #len(action_list)
+action_space = len(action_list)
+# action_type = spaces.Box(-1, 1, shape = (action_space,))
+action_type = spaces.Discrete(action_space)
 
-
-REWARD_GOAL = 1
-REWARD_STEP =  -0.01
-REWARD_CRASH = -1 #REWARD_STEP*10
+REWARD_GOAL = 100
+REWARD_STEP =  -0.5
+REWARD_CRASH = -0.5 #REWARD_STEP*10
 
 class Simu_env():
     def __init__(self, port_num):
@@ -68,7 +69,6 @@ class Simu_env():
         self.goal_reached = False
         self.goal_counter = 0
 
-        self.step_size = 300
         self.init_step = 0
         # self.object_num = 0
         self.terrain_map = np.zeros((map_pixel, map_pixel), np.float32)
@@ -127,14 +127,13 @@ class Simu_env():
 
         # return sorted_state
 
-    def reset(self, step_size, env_mode, reset_mode, save_ep):
+    def reset(self, env_mode, reset_mode, save_ep):
         # print('reset')
         self.dist_pre = 1000
         self.min_obsdist_pre = 0.2
         self.obs_dist_pre = 0
         self.collide_num = 0
         self.ep_step = 0
-        self.step_size = step_size
         self.state_pre = []
         res, retInts, retFloats, retStrings, retBuffer = self.call_sim_function('centauro', 'reset', [observation_range*2, env_mode, reset_mode, save_ep])        
         # state, reward, min_dist, obs_count, is_finish, info = self.step([0, 0, 0, 0, 0])
@@ -154,13 +153,14 @@ class Simu_env():
                 action = action_list[action]
                 
         self.ep_step += 1
-        a = [0,0,0,0,0]
-        a[0] = action[0]
-        a[1] = action[1] 
-        a[2] = action[2] 
-        
-        if action_space != 5:
-            action = a 
+        if isinstance(action_type, spaces.Box):
+            a = [0,0,0,0,0]
+            a[0] = action[0]
+            a[1] = action[1] 
+            a[2] = action[2] 
+            
+            if action_space != 5:
+                action = a 
 
         _, _, _, _, found_pose = self.call_sim_function('centauro', 'step', action)
 
@@ -211,8 +211,8 @@ class Simu_env():
         dist = robot_state[0]
         target_reward = -(dist - self.dist_pre)/0.1
         # target_reward = target_reward/(self.max_length*4)
-        # if target_reward < 0:
-        #     target_reward = 0
+        if target_reward < 0:
+            target_reward = 0
 
         # target_reward = 1 - target_reward
 
@@ -267,13 +267,6 @@ class Simu_env():
             info = 'out'
             # print('outof bound', robot_state[1])
 
-        # if self.ep_step >= self.step_size:
-        #     is_finish = True
-        #     # print(self.ep_step, self.step_size)
-        #     # event_reward = np.exp(-dist)*REWARD_GOAL/2
-        #     info = 'nostep'
-        #     # print('no step', self.ep_step)
-
         # if is_finish:
         #     self.ep_step = 0
 
@@ -305,7 +298,10 @@ class Simu_env():
         if info == 'crash':
             reward = REWARD_CRASH
 
-        event_reward += target_reward
+        if target_reward > 0:
+            target_reward = target_reward * obs_reward
+
+        event_reward = event_reward + target_reward + REWARD_STEP
         # print(reward, min_dist)
         return reward, event_reward, obs_count, is_finish, info
 
