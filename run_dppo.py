@@ -11,15 +11,15 @@ import time
 import matplotlib.pyplot as plt
 
 EP_MAX = 500000
-EP_LEN = 50
-N_WORKER = 7               # parallel workers
-GAMMA = 0.97                 # reward discount factor
-LAM = 0.7
+EP_LEN = 100
+N_WORKER = 4               # parallel workers
+GAMMA = 0.9                 # reward discount factor
+LAM = 0.95
 A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0002               # learning rate for critic
-LR = 0.0001
+LR = 0.001
 
-BATCH_SIZE = 10240
+BATCH_SIZE = 64
 MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
@@ -77,7 +77,7 @@ class PPO(object):
         self.closs = 0.5 * tf.reduce_mean(tf.maximum(self.closs1, self.closs2))
         self.ctrain_op = tf.train.AdamOptimizer(C_LR).minimize(self.closs)
 
-        self.total_loss = self.aloss + self.closs*0.3
+        self.total_loss = self.aloss + self.closs*0.3 - 0.01*self.entropy
 
         # update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         # with tf.control_dependencies(update_ops):
@@ -148,14 +148,14 @@ class PPO(object):
             # ob_state = tf.concat([ob_state , index_in_ep], 1, name = 'concat_ob')
             reshaped_grid = tf.reshape(ob_grid,shape=[-1, img_size, img_size, 1]) 
 
-            x = tf.layers.conv2d(inputs=reshaped_grid, filters=32, kernel_size=[3, 3], padding="valid", activation=tf.nn.tanh)
-            x = tf.layers.conv2d(inputs=x, filters=64, kernel_size=[3, 3], padding="valid", activation=tf.nn.tanh)
-            x = tf.contrib.layers.flatten(x)
-            x = tf.layers.dense(inputs=x, units=1024, activation=tf.nn.tanh)
+            # x = tf.layers.conv2d(inputs=reshaped_grid, filters=32, kernel_size=[3, 3], padding="valid", activation=tf.nn.tanh)
+            # x = tf.layers.conv2d(inputs=x, filters=64, kernel_size=[3, 3], padding="valid", activation=tf.nn.tanh)
+            # x = tf.contrib.layers.flatten(x)
+            # x = tf.layers.dense(inputs=x, units=1024, activation=tf.nn.tanh)
 
             # x = (ob_grid - 0.5)*2
-            # x = tf.layers.dense(ob_grid, 50, tf.nn.tanh, kernel_initializer=w_init, name='x_fc1', trainable=trainable )
-            # x = tf.layers.dense(x, 25, tf.nn.tanh, kernel_initializer=w_init, name='x_fc2', trainable=trainable )
+            x = tf.layers.dense(ob_grid, 50, tf.nn.tanh, kernel_initializer=w_init, name='x_fc1', trainable=trainable )
+            x = tf.layers.dense(x, 25, tf.nn.tanh, kernel_initializer=w_init, name='x_fc2', trainable=trainable )
             # x = self.add_layer(ob_grid, 50, 'x_fc1', ac = tf.nn.tanh)
             # x = self.add_layer(x, 25, 'x_fc2', ac = tf.nn.tanh)
 
@@ -176,7 +176,8 @@ class PPO(object):
         # w_init = tf.zeros_initializer()
         w_init = tf.random_normal_initializer(0., .1)
         with tf.variable_scope(name):
-            self.feature = self._build_feature_net('feature', input_state, trainable=trainable)
+            self.feature_a = self._build_feature_net('feature_a', input_state, trainable=trainable)
+            self.feature_v = self._build_feature_net('feature_v', input_state, trainable=trainable)
 
             with tf.variable_scope('actor'):
                 # l1 = tf.layers.dense(self.tfs, 200, tf.nn.relu, trainable=trainable)
@@ -185,15 +186,15 @@ class PPO(object):
                 # norm_dist = tf.distributions.Normal(loc=mu, scale=sigma)
                 if isinstance(Action_Space, gym.spaces.Box):
                     print('continue action')
-                    pi = tf.layers.dense(self.feature, A_DIM, kernel_initializer=w_init, trainable=trainable)
+                    pi = tf.layers.dense(self.feature_a, A_DIM, kernel_initializer=w_init, trainable=trainable)
                     logstd = tf.get_variable(name="logstd", shape=[1, A_DIM], initializer=tf.zeros_initializer(), trainable=trainable)
                     pdparam = tf.concat([pi, pi * 0.0 + logstd], axis=1)
                 else:
                     print('discrate action')
-                    pdparam = tf.layers.dense(self.feature, A_DIM, kernel_initializer=w_init, trainable=trainable)        
+                    pdparam = tf.layers.dense(self.feature_a, A_DIM, kernel_initializer=w_init, trainable=trainable)        
 
             with tf.variable_scope('value'):
-                v = tf.layers.dense(self.feature, 1, trainable=trainable)
+                v = tf.layers.dense(self.feature_v, 1, trainable=trainable)
                 # v = tf.clip_by_value(v, 0, centauro_env.REWARD_GOAL)
 
         pdtype = make_pdtype(Action_Space)
@@ -373,7 +374,7 @@ class Worker(object):
             # a_demo[4] = 0
             info = 'unfinish'
             if ep_count%10 == 1 or ep_count == 1:
-                self.env.clear_history()
+                # self.env.clear_history()
                 # self.env.clear_history_leave_one()
                 # self.env.reset(0, 0, 0)
                 # self.env.save_ep()
@@ -450,6 +451,9 @@ class Worker(object):
                     # if num_saved < 5 and done == False:
                     #     num_saved += 1
                     #     self.env.save_ep()
+                    # if len(buffer_r) < 2 and info == 'crash':
+                    #     buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, buffer_return, buffer_adv, buffer_done = [], [], [], [], [], [], [], []
+                    #     continue
 
                     if DEMO_MODE:
                         if len(buffer_a) == 0:
@@ -458,10 +462,10 @@ class Worker(object):
                         else:
                             buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, s_ = self.process_demo_path(buffer_a, s_demo)
 
-                    # if done:
-                    #     vpred_ = 0
-                    # else:
-                    vpred_ = self.ppo.get_v(s_)
+                    if done:
+                        vpred_ = 0
+                    else:
+                        vpred_ = self.ppo.get_v(s_)
                     buffer_done.append(0)
                     buffer_vpred.append(vpred_)
                     buffer_return = np.zeros_like(buffer_r)
@@ -469,7 +473,10 @@ class Worker(object):
                     lastgaelam = 0
 
                     for index in reversed(range(len(buffer_r))):
-                        nonterminal = 1-buffer_done[index+1]
+                        if index == len(buffer_r):
+                            nonterminal = 1-done
+                        else:
+                            nonterminal = 1
                         delta = buffer_er[index] + GAMMA * buffer_vpred[index+1] * nonterminal - buffer_vpred[index]
                         buffer_adv[index] = lastgaelam = delta + GAMMA * LAM * nonterminal * lastgaelam
                     buffer_return = buffer_adv + buffer_vpred[:-1]
@@ -481,11 +488,11 @@ class Worker(object):
                     #     print(buffer_a[i], 'ret', buffer_return[i], 'pred', buffer_vpred[i], 'adv', buffer_adv[i], buffer_r[i])
                     # print(DEMO_MODE, info)
 
-                    # if self.wid == 0:
-                    #     print(buffer_er)
-                    #     print (buffer_return)
-                    #     # print(buffer_vpred)
-                    #     print (buffer_adv)
+                    if self.wid == 0:
+                        print(buffer_er)
+                        print (buffer_return)
+                        print(buffer_vpred)
+                        print (buffer_adv)
                     bs, ba, bret, brew, badv = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return)[:, np.newaxis], np.array(buffer_r)[:, np.newaxis], np.array(buffer_adv)[:, np.newaxis]
 
                     buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, buffer_return, buffer_adv, buffer_done = [], [], [], [], [], [], [], []
@@ -502,11 +509,11 @@ class Worker(object):
                         COORD.request_stop()
                         break
 
-                    # if DEMO_MODE == False and (info == 'goal' or info == 'out' or t == ep_length-1):
-                    #     break 
-
-                    if DEMO_MODE == False and (t == ep_length-1 or done):
+                    if DEMO_MODE == False and (info == 'goal' or info == 'out' or t == ep_length-1):
                         break 
+
+                    # if DEMO_MODE == False and (t == ep_length-1 or done):
+                    #     break 
 
                     # if DEMO_MODE == False and retry and t < ep_length-1:
                     #     s = self.env.reset(0, 5, 0) 

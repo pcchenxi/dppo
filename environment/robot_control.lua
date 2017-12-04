@@ -99,6 +99,7 @@ function do_action_rl(robot_hd, action)
     -- end
 
     if result ~= 't' then 
+    -- if result == 'a' then
         simSetObjectPosition(robot_hd,-1,current_pos)
         simSetObjectOrientation(robot_hd,-1,current_ori)
         set_joint_values(_joint_hds, current_joint_values)
