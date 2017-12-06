@@ -211,8 +211,8 @@ class Simu_env():
         dist = robot_state[0]
         target_reward = -(dist - self.dist_pre)/0.1
         # target_reward = target_reward/(self.max_length*4)
-        if target_reward < 0:
-            target_reward = 0
+        # if target_reward < 0:
+        #     target_reward = 0
 
         # target_reward = 1 - target_reward
 
@@ -239,14 +239,14 @@ class Simu_env():
         # print(obs_count)
 
         if found_pose == bytearray(b"a"):       # when collision or no pose can be found
-            is_finish = True
+            # is_finish = True
             event_reward = REWARD_CRASH
             # print('crash a')
             # reward = reward*10       
             info = 'crash'
 
         if found_pose == bytearray(b"c"):       # when collision or no pose can be found
-            is_finish = True
+            # is_finish = True
             event_reward = REWARD_CRASH
             # print('crash')
             # reward = reward * 10
@@ -263,7 +263,7 @@ class Simu_env():
 
         if dist > 1.2: # out of boundary
             is_finish = True
-            event_reward = -REWARD_GOAL
+            # event_reward = -REWARD_GOAL
             info = 'out'
             # print('outof bound', robot_state[1])
 
@@ -304,10 +304,13 @@ class Simu_env():
         # if info == 'crash':
         #     reward = REWARD_CRASH
 
-        # if target_reward > 0:
-        #     target_reward = target_reward * obs_reward
+        if target_reward > 0:
+            target_reward = target_reward * obs_reward
 
-        event_reward = event_reward + target_reward # + REWARD_STEP
+        # event_reward = event_reward + target_reward # + REWARD_STEP
+        reward = target_reward * 0.01 + event_reward
+        # if reward == 0:
+        #     reward = -0.01
         # print(reward, min_dist)
         return reward, event_reward, obs_count, is_finish, info
 

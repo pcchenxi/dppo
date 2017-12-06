@@ -20,7 +20,7 @@ C_LR = 0.0002               # learning rate for critic
 LR = 0.001
 
 BATCH_SIZE = 64
-MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
+MIN_BATCH_SIZE = 32       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
@@ -74,10 +74,10 @@ class PPO(object):
         self.closs1 = tf.square(self.tfdc_r - self.v)
         self.closs2 = tf.square(self.tfdc_r - vpredclipped)
 
-        self.closs = 0.5 * tf.reduce_mean(tf.maximum(self.closs1, self.closs2))
+        self.closs = 0.5 * tf.reduce_mean(self.closs1) #tf.reduce_mean(tf.maximum(self.closs1, self.closs2))
         self.ctrain_op = tf.train.AdamOptimizer(C_LR).minimize(self.closs)
 
-        self.total_loss = self.aloss + self.closs*0.3 - 0.01*self.entropy
+        self.total_loss = self.aloss + self.closs*0.1 - 0.0*self.entropy
 
         # update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         # with tf.control_dependencies(update_ops):
@@ -235,17 +235,14 @@ class PPO(object):
             
             # adv = self.sess.run(self.advantage, {self.tfs: s, self.tfdc_r: r})
 
-            if adv.std() != 0:                
-                adv = (adv - adv.mean())/adv.std()
-                # adv = ((adv - adv.min())/(adv.max() - adv.min()) - 0.5)*2
-                print('adv min max', adv.mean(), adv.min(), adv.max())
-
-            # adv = adv * 1 + reward * 0
-            # for i in range(len(r)):
-            #     print(a[i], 'ret', r[i], 'adv', adv[i], reward[i])
+            # if adv.std() != 0:                
+            #     adv = (adv - adv.mean())/adv.std()
+            #     # adv = ((adv - adv.min())/(adv.max() - adv.min()) - 0.5)*2
+            #     print('adv min max', adv.mean(), adv.min(), adv.max())
 
             mean_return = np.mean(r)
             print(G_ITERATION, '  --------------- update! batch size:', GLOBAL_EP, '-----------------', len(r))
+            vpred = self.sess.run(self.v, feed_dict = {self.tfs:s})
 
             for iteration in range(UPDATE_STEP):
                 # construct reward predict data
@@ -289,7 +286,10 @@ class PPO(object):
                 self.tfadv: adv, 
                 self.tf_is_train: False
             }
-            # ratio, surr, surr2 = self.sess.run([self.ratio, self.surr, self.surr2], feed_dict = feed_dict)
+            ratio, surr, surr2 = self.sess.run([self.ratio, self.surr, self.surr2], feed_dict = feed_dict)
+            ratio = ratio.flatten()
+            for i in range(len(r)):
+                print("%8.6f, %8.6f, %8.6f, %8.6f, %8.6f"%(reward[i], r[i], vpred[i], adv[i], ratio[i]))
             # ratio_clip = np.clip(ratio, 1-EPSILON, 1+EPSILON)
             # surr_ = ratio*adv.flatten()
             # surr2_ = ratio_clip*adv.flatten()
@@ -423,10 +423,10 @@ class Worker(object):
                 if DEMO_MODE and (info == 'goal' or info == 'crash'):
                     done = False
 
-                if self.wid == 0:
-                    vpred_ = self.ppo.get_v(s_)
-                    td = event_r + GAMMA*vpred_ - vpred
-                    print("vpred_: %7.4f| event_r: %7.4f| vpred: %7.4f| TD: %7.4f| " %(vpred_, event_r, vpred, td))
+                # if self.wid == 0:
+                #     vpred_ = self.ppo.get_v(s_)
+                #     td = event_r + GAMMA*vpred_ - vpred
+                #     print("vpred_: %7.4f| event_r: %7.4f| vpred: %7.4f| TD: %7.4f| " %(vpred_, event_r, vpred, td))
 
                 if DEMO_MODE == False or (DEMO_MODE and info != 'crash'):
                     buffer_s.append(s*1)
@@ -447,7 +447,7 @@ class Worker(object):
                 #     retry = True
                 #     mb_t = 0
 
-                if done or retry or GLOBAL_UPDATE_COUNTER >= ep_batch_size or t == ep_length-1:
+                if done or GLOBAL_UPDATE_COUNTER >= ep_batch_size or t == ep_length-1:
                     # if num_saved < 5 and done == False:
                     #     num_saved += 1
                     #     self.env.save_ep()
@@ -462,24 +462,47 @@ class Worker(object):
                         else:
                             buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, s_ = self.process_demo_path(buffer_a, s_demo)
 
-                    if done:
-                        vpred_ = 0
-                    else:
-                        vpred_ = self.ppo.get_v(s_)
+                    # vpred_ = 0
+                    # if done:
+                    #     vpred_ = 0
+                    # else:
+                    vpred_ = self.ppo.get_v(s_)
+
                     buffer_done.append(0)
                     buffer_vpred.append(vpred_)
                     buffer_return = np.zeros_like(buffer_r)
                     buffer_adv = np.zeros_like(buffer_r)
                     lastgaelam = 0
 
+                    if np.count_nonzero(buffer_er) == 0 or True:
+                        reward = buffer_r
+                    else:
+                        reward = buffer_er
+
+                    # vpred_temp = buffer_vpred*1
+                    # buffer_vpred = np.zeros_like(buffer_vpred)
                     for index in reversed(range(len(buffer_r))):
                         if index == len(buffer_r):
                             nonterminal = 1-done
                         else:
                             nonterminal = 1
-                        delta = buffer_er[index] + GAMMA * buffer_vpred[index+1] * nonterminal - buffer_vpred[index]
+                        delta = reward[index] + GAMMA * buffer_vpred[index+1] * nonterminal - buffer_vpred[index]
                         buffer_adv[index] = lastgaelam = delta + GAMMA * LAM * nonterminal * lastgaelam
                     buffer_return = buffer_adv + buffer_vpred[:-1]
+
+                    # if np.count_nonzero(buffer_er) == 0 or True:
+                    #     buffer_adv = buffer_r
+                    #     reward = buffer_r
+                        # buffer_return = buffer_vpred[:-1]
+                    #     buffer_adv = np.asarray(buffer_adv)  
+                    # else:
+                    #     reward = buffer_er
+                    #     buffer_adv = np.asarray(buffer_adv)  
+
+                    if buffer_adv.std() != 0:              
+                        buffer_adv = (buffer_adv - buffer_adv.mean())/buffer_adv.std()
+                        # adv = ((adv - adv.min())/(adv.max() - adv.min()) - 0.5)*2
+                        # print('adv min max', adv.mean(), adv.min(), adv.max())
 
                     # buffer_return = self.discount(buffer_er, GAMMA)
                     # buffer_adv = self.compute_gae(buffer_er, buffer_vpred)
@@ -488,12 +511,14 @@ class Worker(object):
                     #     print(buffer_a[i], 'ret', buffer_return[i], 'pred', buffer_vpred[i], 'adv', buffer_adv[i], buffer_r[i])
                     # print(DEMO_MODE, info)
 
-                    if self.wid == 0:
-                        print(buffer_er)
-                        print (buffer_return)
-                        print(buffer_vpred)
-                        print (buffer_adv)
-                    bs, ba, bret, brew, badv = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return)[:, np.newaxis], np.array(buffer_r)[:, np.newaxis], np.array(buffer_adv)[:, np.newaxis]
+                    # if self.wid == 0:
+                    #     print(reward)
+                    #     print (buffer_return)
+                    #     print(buffer_vpred)
+                    #     print (buffer_adv)
+
+
+                    bs, ba, bret, brew, badv = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return)[:, np.newaxis], np.array(reward)[:, np.newaxis], np.array(buffer_adv)[:, np.newaxis]
 
                     buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, buffer_return, buffer_adv, buffer_done = [], [], [], [], [], [], [], []
                 

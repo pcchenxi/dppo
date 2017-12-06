@@ -110,33 +110,34 @@ def posteriorDistribution(prevPosterior , likelihood):
     return prevPosterior
 
 # visualise the prior over W
-kPrior = [[0.3,0],[0,0.3]]
-muPrior = [0, 0]
-N = 1000000
+# kPrior = [[0.3,0],[0,0.3]]
+# muPrior = [0, 0]
+# N = 1000000
 #plot prior
 #(prior,1)
 #parameters
-w0 = 1.3
-w1 = 0.5
-sigma = 0.3
+w0 = -1.5
+w1 = -0.8
+sigma = 0.2
 mu = 0
 #pick first point
 
 plotPrior(100)
 x, y = pickDataPoint(w0,w1,sigma,mu)
-print(x)
+print(x, y)
 Z, W = computeLikelihood(100, x,y)
 plotSamples(W)
 
 
-# plotLikelihood(Z)
-# for i in range(25):
-#     x1, y1 = pickDataPoint(w0,w1,sigma,mu)
-#     Z,W = computeLikelihood(100, x1, y1, Z)
-#     if i==1:
-#         plotSamples(W)
-#         plotLikelihood(Z)
+plotLikelihood(Z)
+for i in range(100):
+    x1, y1 = pickDataPoint(w0,w1,sigma,mu)
+    Z,W = computeLikelihood(100, x1, y1, Z)
+    print(i)
+    if i%4 == 0:
+        plotSamples(W)
+        plotLikelihood(Z)
 
-# plotSamples(W)
-# plotLikelihood(Z)
+plotSamples(W)
+plotLikelihood(Z)
 
