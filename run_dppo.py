@@ -11,16 +11,16 @@ import time
 import matplotlib.pyplot as plt
 
 EP_MAX = 500000
-EP_LEN = 200
-N_WORKER = 7               # parallel workers
-GAMMA = 0.97                 # reward discount factor
+EP_LEN = 100
+N_WORKER = 1               # parallel workers
+GAMMA = 0.9                 # reward discount factor
 LAM = 0.92
 A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0002               # learning rate for critic
-LR = 0.0001
+LR = 0.001
 
-BATCH_SIZE = 10240
-MIN_BATCH_SIZE = 256       # minimum batch size for updating PPO
+BATCH_SIZE = 128
+MIN_BATCH_SIZE = 32       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
@@ -54,9 +54,14 @@ class PPO(object):
         else:
             self.tfa = tf.placeholder(tf.int32, [None], 'action')
         self.tfadv = tf.placeholder(tf.float32, [None], 'advantage')
+
+        a_prob = tf.reduce_sum(pi.logits * tf.one_hot(self.tfa, A_DIM, dtype=tf.float32), axis=1, keep_dims=True)
+        olda_prob = tf.reduce_sum(oldpi.logits * tf.one_hot(self.tfa, A_DIM, dtype=tf.float32), axis=1, keep_dims=True)
+        self.ratio = a_prob/(olda_prob + 1e-8)
         # ratio = tf.exp(pi.log_prob(self.tfa) - oldpi.log_prob(self.tfa))
         # ratio = pi.prob(self.tfa) / (oldpi.prob(self.tfa) + 1e-5)
-        self.ratio = tf.exp(oldpi.neglogp(self.tfa) - pi.neglogp(self.tfa))
+        # self.ratio = tf.exp(oldpi.neglogp(self.tfa) - pi.neglogp(self.tfa))
+
         self.surr = self.ratio * self.tfadv                       # surrogate loss
         self.surr2 = tf.clip_by_value(self.ratio, 1. - EPSILON, 1. + EPSILON) * self.tfadv
         self.aloss = -tf.reduce_mean(tf.minimum(self.surr, self.surr2))
@@ -77,7 +82,7 @@ class PPO(object):
         self.closs = 0.5 * tf.reduce_mean(self.closs1) #tf.reduce_mean(tf.maximum(self.closs1, self.closs2))
         self.ctrain_op = tf.train.AdamOptimizer(C_LR).minimize(self.closs)
 
-        self.total_loss = self.aloss + self.closs*0.5 - 0.02*self.entropy
+        self.total_loss = self.aloss + self.closs*0.5 - 0.0*self.entropy
 
         # update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         # with tf.control_dependencies(update_ops):
@@ -88,7 +93,12 @@ class PPO(object):
         self.sess.run(tf.global_variables_initializer())
 
         self.saver = tf.train.Saver()
-        self.summary_writer = tf.summary.FileWriter('./log', self.sess.graph)     
+        self.summary_writer = tf.summary.FileWriter('./log', self.sess.graph)    
+        self.pi_prob = pi.logits
+        self.oldpi_prob = oldpi.logits
+
+        self.a_prob = a_prob
+        self.olda_prob = olda_prob
         # self.load_model()   
 
     def load_model(self):
@@ -191,7 +201,8 @@ class PPO(object):
                     pdparam = tf.concat([pi, pi * 0.0 + logstd], axis=1)
                 else:
                     print('discrate action')
-                    pdparam = tf.layers.dense(self.feature_a, A_DIM, kernel_initializer=w_init, trainable=trainable)        
+                    # pdparam = tf.layers.dense(self.feature_a, A_DIM, kernel_initializer=w_init, trainable=trainable)  
+                    pdparam = tf.layers.dense(self.feature_a, A_DIM, tf.nn.softmax, kernel_initializer=w_init, trainable=trainable)      
 
             with tf.variable_scope('value'):
                 v = tf.layers.dense(self.feature_v, 1, trainable=trainable)
@@ -205,7 +216,10 @@ class PPO(object):
 
     def choose_action(self, s):
         s = s[np.newaxis, :]
-        a = self.sess.run(self.sample_op, {self.tfs: s, self.tf_is_train: False})[0]
+        # a = self.sess.run(self.sample_op, {self.tfs: s, self.tf_is_train: False})[0]
+        prob_weights = self.sess.run(self.pi_prob, feed_dict={self.tfs: s})
+        a = np.random.choice(range(prob_weights.shape[1]),
+                                  p=prob_weights.ravel())
         if isinstance(Action_Space, gym.spaces.Box):
             a = np.clip(a, -1, 1)
         return a
@@ -214,6 +228,17 @@ class PPO(object):
         if s.ndim < 2: s = s[np.newaxis, :]
         return self.sess.run(self.v, {self.tfs: s, self.tf_is_train: False})[0, 0]
 
+    def check_overall_loss(self, s, a, r, adv):
+        feed_dict = {
+            self.tfs: s, 
+            self.tfa: a, 
+            self.tfdc_r: r, 
+            self.tfadv: adv, 
+            self.tf_is_train: False
+        }
+
+        tloss, aloss, vloss, entropy = self.sess.run([self.total_loss, self.aloss, self.closs, self.entropy], feed_dict = feed_dict)
+        return tloss, aloss, vloss, entropy 
 
     def update(self):
         global GLOBAL_UPDATE_COUNTER, G_ITERATION
@@ -232,23 +257,28 @@ class PPO(object):
                 r = r.flatten()
                 adv = adv.flatten()
             
-            # adv = self.sess.run(self.advantage, {self.tfs: s, self.tfdc_r: r})
+            # adv_max = adv.max()
+            # adv_min = adv.min()
+            # clip1 = adv_min + (adv_max - adv_min)/3
+            # clip2 = adv_max - (adv_max - adv_min)/3
+            # for i in range(len(adv)):
+            #     if adv[i] > clip1 and adv[i] < clip2:
+            #         adv[i] = 0
 
             # if adv.std() != 0:                
-            #     adv = (adv - adv.mean())/adv.std()
+            # adv = (adv - adv.mean())/adv.std()
             #     # adv = ((adv - adv.min())/(adv.max() - adv.min()) - 0.5)*2
             #     print('adv min max', adv.mean(), adv.min(), adv.max())
 
             mean_return = np.mean(r)
             print(G_ITERATION, '  --------------- update! batch size:', GLOBAL_EP, '-----------------', len(r))
-            vpred = self.sess.run(self.v, feed_dict = {self.tfs:s})
+            vpred, olda_prob = self.sess.run([self.v, self.oldpi_prob], feed_dict = {self.tfs:s, self.tfa:a})
             vpred = vpred.flatten()
 
+            # adv_filtered = adv = (adv - adv.mean())/adv.std()
+
             for iteration in range(UPDATE_STEP):
-                # construct reward predict data
-                tloss, aloss, vloss, rp_loss, vr_loss = [], [], [], [], []
-                tloss_sum, aloss_sum, vloss_sum, rp_loss_sum, vr_loss_sum, entropy_sum = 0, 0, 0, 0, 0, 0  
-                
+                # construct reward predict data                
                 s_, a_, r_, adv_ = self.shuffel_data(s, a, r, adv)   
                 count = 0
                 for start in range(0, len(r), MIN_BATCH_SIZE):
@@ -261,7 +291,9 @@ class PPO(object):
                     sub_s = s_[start:end]
                     sub_a = a_[start:end]
                     sub_r = r_[start:end]
-                    sub_adv = adv_[start:end]
+                    sub_adv = np.asarray(adv_[start:end])
+                    # sub_adv = (sub_adv - sub_adv.mean())/sub_adv.std()
+
                     feed_dict = {
                         self.tfs: sub_s, 
                         self.tfa: sub_a, 
@@ -270,14 +302,10 @@ class PPO(object):
                         self.tf_is_train: True
                     }
 
-                    tloss, aloss, vloss, entropy, _ = self.sess.run([self.total_loss, self.aloss, self.closs, self.entropy, self.train_op], feed_dict = feed_dict)
-                    
-                    tloss_sum += tloss
-                    aloss_sum += aloss 
-                    vloss_sum += vloss 
-                    entropy_sum += np.mean(entropy)
+                    self.sess.run(self.train_op, feed_dict = feed_dict)
 
-                print("aloss: %7.4f|, vloss: %7.4f| entropy: %7.4f" % (aloss_sum/count, vloss_sum/count, entropy_sum/count))
+                tloss, aloss, vloss, entropy = self.check_overall_loss(s, a, r, adv)
+                print("aloss: %7.4f|, vloss: %7.4f| entropy: %7.4f" % (aloss, vloss, entropy))
 
             feed_dict = {
                 self.tfs: s, 
@@ -286,10 +314,15 @@ class PPO(object):
                 self.tfadv: adv, 
                 self.tf_is_train: False
             }
-            ratio, surr, surr2 = self.sess.run([self.ratio, self.surr, self.surr2], feed_dict = feed_dict)
+            # onehota_prob, oldhota_prob, ratio = self.sess.run([self.a_prob, self.olda_prob, self.ratio], feed_dict = feed_dict)
+            # for i in range(len(r)):
+            #     print(onehota_prob[i], oldhota_prob[i], ratio[i])
+
+            ratio, surr, surr2, a_prob = self.sess.run([self.ratio, self.surr, self.surr2, self.pi_prob], feed_dict = feed_dict)
             ratio = ratio.flatten()
             for i in range(len(r)):
-                print("%8.6f, %8.6f, %8.6f, %8.6f, %8.6f, %8.6f %i"%(reward[i], r[i], vpred[i], r[i]-vpred[i], adv[i], ratio[i], a[i]))
+                act = int(a[i])
+                print("%8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %6.0i, %8.4f, %8.4f"%(reward[i], r[i], vpred[i], adv[i], adv[i], ratio[i], a[i], olda_prob[i][act],a_prob[i][act]))
             # ratio_clip = np.clip(ratio, 1-EPSILON, 1+EPSILON)
             # surr_ = ratio*adv.flatten()
             # surr2_ = ratio_clip*adv.flatten()
@@ -301,11 +334,11 @@ class PPO(object):
             print('-------------------------------------------------------------------------------')
             print("aloss: %7.4f|, vloss: %7.4f| entropy: %7.4f" % (aloss, vloss, np.mean(entropy)))
 
-            self.write_summary('Loss/entropy', np.mean(entropy))  
-            self.write_summary('Loss/a loss', aloss) 
-            self.write_summary('Loss/v loss', vloss) 
-            self.write_summary('Loss/t loss', tloss) 
-            self.write_summary('Perf/mean_reward', np.mean(reward))  
+            # self.write_summary('Loss/entropy', np.mean(entropy))  
+            # self.write_summary('Loss/a loss', aloss) 
+            # self.write_summary('Loss/v loss', vloss) 
+            # self.write_summary('Loss/t loss', tloss) 
+            # self.write_summary('Perf/mean_reward', np.mean(reward))  
 
             self.saver.save(self.sess, './model/rl/model.cptk') 
 
@@ -326,16 +359,18 @@ class Worker(object):
         s = start_ob
         for i in range(len(demo_a)-1, -1, -1):
             a = demo_a[i]
-            # full_a = self.env.action_list[a]
-            # full_a = -np.array(full_a)
-            # for index in range(len(self.env.action_list)):
-            #     env_action = np.array(self.env.action_list[index])
-            #     if np.array_equal(env_action, full_a):
-            #         a = index 
-            #         break
+            full_a = self.env.action_list[a]
+            full_a = -np.array(full_a)
+            for index in range(len(self.env.action_list)):
+                env_action = np.array(self.env.action_list[index])
+                if np.array_equal(env_action, full_a):
+                    a = index 
+                    break
             # print('reversed action', full_a, a)
-            # a = full_a
-            a = -a
+
+            # for continues action
+            # a = -a
+
             s_, r, event_r, done, info = self.env.step(a)
             vpred = self.ppo.get_v(s)
 
@@ -362,26 +397,24 @@ class Worker(object):
             , Crash_states, Crash_count, Crash_return, Crash_buffer_full \
             , History_states, History_count, History_adv, History_return, History_buffer_full
 
-        # self.env.save_ep()
-        # s = self.env.reset( 0, 1, 0)
+        self.env.save_ep()
+        s = self.env.reset( 0, 1, 0)
 
         ep_count = 0
         while not COORD.should_stop():
             buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, buffer_return, buffer_adv, buffer_done = [], [], [], [], [], [], [], []
             ep_count += 1
             ep_step = 0
-            a_demo = np.random.rand(A_DIM)# np.array([-1, 0, 0, 0, 0])
-            # a_demo[3] = 0
-            # a_demo[4] = 0
+            a_demo = np.random.randint(A_DIM) # np.array([-1, 0, 0, 0, 0])
             info = 'unfinish'
-            if ep_count%10 == 1 or ep_count == 1:
+            # if ep_count%10 == 1 or ep_count == 1:
                 # self.env.clear_history()
                 # self.env.clear_history_leave_one()
                 # self.env.reset(0, 0, 0)
                 # self.env.save_ep()
-                num_saved = 0
+                # num_saved = 0
 
-            if ep_count%5 == 0 and False:
+            if ep_count%5 == 0:
                 s = self.env.reset(0, 4, 0)
                 ep_length = int(EP_LEN)
                 DEMO_MODE = True
@@ -405,8 +438,10 @@ class Worker(object):
                     # a = np.random.randint(A_DIM, size=1)
                     # a = a[0]
                     if info == 'crash' or np.random.rand() > 0.5:
-                        a = np.random.rand(A_DIM)
-                        a = (a-0.5)*2
+                        # a = np.random.rand(3)
+                        # a = (a-0.5)*2
+                        a = np.random.randint(A_DIM, size=1)
+                        a = a[0]
                     # elif info == 'crash':
                     #     s_demo = s*1
                     #     s_demo[-5] = -s_demo[-5]
@@ -495,7 +530,8 @@ class Worker(object):
                         # print (index, len(buffer_r), nonterminal, delta, lastgaelam, buffer_adv[index])
                     buffer_return = buffer_adv + buffer_vpred[:-1]
 
-                    # if np.count_nonzero(buffer_er) == 0 or True:
+                    if np.count_nonzero(buffer_er) == 0:
+                        buffer_adv = buffer_adv * 0.01
                     #     buffer_adv = buffer_r
                     #     reward = buffer_r
                         # buffer_return = buffer_vpred[:-1]
@@ -536,7 +572,7 @@ class Worker(object):
                         COORD.request_stop()
                         break
 
-                    if DEMO_MODE == False and (info == 'goal' or info == 'out' or t == ep_length-1):
+                    if info == 'goal' or info == 'out' or t == ep_length-1:
                         break 
 
                     # if DEMO_MODE == False and (t == ep_length-1 or done):
