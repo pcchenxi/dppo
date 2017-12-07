@@ -19,7 +19,7 @@ _init_target_dist = 1
 _target_dist = _init_target_dist
 
 _new_ep_prob = 0
-_modifly_prob = 0
+_modifly_prob = 0.9
 
 function start()
     -- sleep (3)
@@ -555,7 +555,7 @@ end
 function restore_ep(ep, modifly)
     local episode = copy_table(ep) 
 
-    local shift = 0.2
+    local shift = 0.3
     local robot_shift = 0.1
     local hds = episode[1]
     local params = episode[2]

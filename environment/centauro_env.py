@@ -16,20 +16,20 @@ action_list = []
 for x in range(-1, 2):
     for y in range(-1, 2):
         for w in range(-1, 2):
-            # for h in range(-1, 2):
-            #     for l in range(-1, 2):
-            action = []
-            action.append(x)
-            action.append(y)
-            action.append(w)
-            action.append(0)
-            action.append(0)
+            for h in range(-1, 2):
+                for l in range(-1, 2):
+                    action = []
+                    action.append(x)
+                    action.append(y)
+                    action.append(w)
+                    action.append(h)
+                    action.append(l)
 
-            if np.count_nonzero(action) == 0:
-                continue 
+                    if np.count_nonzero(action) == 0:
+                        continue 
 
-            action_list.append(action)
-            # print action_list
+                    action_list.append(action)
+                    # print action_list
 
 observation_range = 1.5
 
@@ -48,9 +48,9 @@ action_space = len(action_list)
 # action_type = spaces.Box(-1, 1, shape = (action_space,))
 action_type = spaces.Discrete(action_space)
 
-REWARD_GOAL = 300
-REWARD_STEP =  -0.5
-REWARD_CRASH = 0 #REWARD_STEP*10
+REWARD_GOAL = 20
+REWARD_STEP =  -0.05
+REWARD_CRASH = -0.5 #REWARD_STEP*10
 
 class Simu_env():
     def __init__(self, port_num):
@@ -239,14 +239,14 @@ class Simu_env():
         # print(obs_count)
 
         if found_pose == bytearray(b"a"):       # when collision or no pose can be found
-            # is_finish = True
+            is_finish = True
             event_reward = REWARD_CRASH
             # print('crash a')
             # reward = reward*10       
             info = 'crash'
 
         if found_pose == bytearray(b"c"):       # when collision or no pose can be found
-            # is_finish = True
+            is_finish = True
             event_reward = REWARD_CRASH
             # print('crash')
             # reward = reward * 10
@@ -308,9 +308,11 @@ class Simu_env():
             target_reward = target_reward * obs_reward
 
         # event_reward = event_reward + target_reward # + REWARD_STEP
-        reward = target_reward * 0.01 + event_reward
-        # if reward == 0:
-        #     reward = -0.01
+        # reward = target_reward * 1 + event_reward
+        # if min_dist < 0.1:
+        #     reward = -1
+
+        reward = event_reward + target_reward * 0.5
         # print(reward, min_dist)
         return reward, event_reward, obs_count, is_finish, info
 
