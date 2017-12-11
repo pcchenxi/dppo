@@ -12,15 +12,15 @@ import matplotlib.pyplot as plt
 
 EP_MAX = 500000
 EP_LEN = 100
-N_WORKER = 7               # parallel workers
+N_WORKER = 1               # parallel workers
 GAMMA = 0.97                # reward discount factor
 LAM = 0.92
 A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0001               # learning rate for critic
 LR = 0.00001
 
-BATCH_SIZE = 10240
-MIN_BATCH_SIZE = 256       # minimum batch size for updating PPO
+BATCH_SIZE = 128
+MIN_BATCH_SIZE = 32       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
@@ -69,7 +69,6 @@ class PPO(object):
 
         a_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='net/actor')
         self.atrain_op = tf.train.AdamOptimizer(A_LR).minimize(self.aloss, var_list = a_params)
-        print(a_params)
         # critic
         # self.feature = self._build_feature_net('feature', self.tfs)
         # l1 = tf.layers.dense(self.feature, 100, tf.nn.relu)
@@ -82,7 +81,6 @@ class PPO(object):
 
         self.closs = tf.reduce_mean(self.closs1) #tf.reduce_mean(tf.maximum(self.closs1, self.closs2))
         c_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='net/value')
-        print(c_params)
         self.ctrain_op = tf.train.AdamOptimizer(C_LR).minimize(self.closs, var_list = c_params)
 
         self.total_loss = self.aloss + self.closs*0.5 - 0.0*self.entropy
@@ -264,14 +262,6 @@ class PPO(object):
                 a = a.flatten()
                 r = r.flatten()
                 adv = adv.flatten()
-            
-            # adv_max = adv.max()
-            # adv_min = adv.min()
-            # clip1 = adv_min + (adv_max - adv_min)/3
-            # clip2 = adv_max - (adv_max - adv_min)/3
-            # for i in range(len(adv)):
-            #     if adv[i] > clip1 and adv[i] < clip2:
-            #         adv[i] = 0
 
             # if adv.std() != 0:                
             # adv = (adv - adv.mean())/adv.std()
@@ -309,7 +299,6 @@ class PPO(object):
                         self.tfadv: sub_adv, 
                         self.tf_is_train: True
                     }
-
                     # self.sess.run(self.train_op, feed_dict = feed_dict)
                     self.sess.run([self.atrain_op, self.ctrain_op], feed_dict = feed_dict)
 
@@ -329,9 +318,24 @@ class PPO(object):
 
             ratio, surr, surr2, a_prob, vpred_new = self.sess.run([self.ratio, self.surr, self.surr2, self.pi_prob, self.v], feed_dict = feed_dict)
             ratio = ratio.flatten()
-            for i in range(len(r)):
+            for i in range(20): #range(len(r)):
                 act = int(a[i])
-                print("%8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %6.0i, %8.4f, %8.4f"%(reward[i], r[i], vpred[i], vpred_new[i], adv[i], ratio[i], a[i], olda_prob[i][act],a_prob[i][act]))
+                output = []
+                output.append(reward[i][0])
+                output.append(r[i])
+                output.append(vpred[i])
+                output.append(vpred_new[i][0])
+                output.append(adv[i])
+                output.append(ratio[i])
+                output.append(a[i])
+                output.append(0)
+                for prob in olda_prob[i]:
+                    output.append(prob)
+                output.append(0)
+                for prob in a_prob[i]:
+                    output.append(prob)
+                print(output)
+                # print("%8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %6.0i, %8.4f, %8.4f"%(reward[i], r[i], vpred[i], vpred_new[i], adv[i], ratio[i], a[i], olda_prob[i][act],a_prob[i][act]))
             # ratio_clip = np.clip(ratio, 1-EPSILON, 1+EPSILON)
             # surr_ = ratio*adv.flatten()
             # surr2_ = ratio_clip*adv.flatten()
@@ -376,7 +380,6 @@ class Worker(object):
                     a = index 
                     break
             # print('reversed action', full_a, a)
-
             # for continues action
             # a = -a
 
@@ -399,120 +402,51 @@ class Worker(object):
 
         return buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, s_
 
-
     def work(self):
         global GLOBAL_EP, GLOBAL_RUNNING_R, GLOBAL_UPDATE_COUNTER \
             , Goal_states, Goal_count, Goal_return, Goal_buffer_full \
             , Crash_states, Crash_count, Crash_return, Crash_buffer_full \
             , History_states, History_count, History_adv, History_return, History_buffer_full
 
-        # self.env.save_ep()
-        # s = self.env.reset( 0, 1, 0)
+        self.env.save_ep()
+        s = self.env.reset( 0, 1, 0)
 
-        ep_count = 0
         while not COORD.should_stop():
             buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, buffer_return, buffer_adv, buffer_done = [], [], [], [], [], [], [], []
-            ep_count += 1
-            ep_step = 0
-            a_demo = np.random.randint(A_DIM) # np.array([-1, 0, 0, 0, 0])
             info = 'unfinish'
-            if ep_count%20 == 1 or ep_count == 1:
-                self.env.clear_history()
-                # self.env.clear_history_leave_one()
-                self.env.reset(0, 0, 0)
-                self.env.save_ep()
-                num_saved = 0
 
-            if ep_count%5 == 0 and False:
-                s = self.env.reset(0, 4, 0)
-                ep_length = int(EP_LEN)
-                DEMO_MODE = True
-                # self.env.clear_history_leave_one()
-                ep_batch_size = BATCH_SIZE
-            else:
-                s = self.env.reset(0, 1, 0)
-                ep_length = EP_LEN
-                ep_batch_size = BATCH_SIZE
-                DEMO_MODE = False
+            s = self.env.reset(0, 1, 0)
             t = 0
-            mb_t = 0
-            retry = False
-            while(1):
+            
+            test_actions = [3, 3, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 4, 4]
+
+            for a in test_actions:
                 if not ROLLING_EVENT.is_set():                  # while global PPO is updating
                     ROLLING_EVENT.wait()                        # wait until PPO is updated
                     buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, buffer_return, buffer_adv = [], [], [], [], [], [], []
-                    # break
-
-                if DEMO_MODE:
-                    # a = np.random.randint(A_DIM, size=1)
-                    # a = a[0]
-                    if info == 'crash' or np.random.rand() > 0.5:
-                        # a = np.random.rand(3)
-                        # a = (a-0.5)*2
-                        a = np.random.randint(A_DIM, size=1)
-                        a = a[0]
-                    # elif info == 'crash':
-                    #     s_demo = s*1
-                    #     s_demo[-5] = -s_demo[-5]
-                    #     s_demo[-6] = -s_demo[-6]
-                    #     a = self.ppo.choose_action(s)
-                    else:
-                        a = a_demo
-                    # print('demo action', a)
-                else:
-                    a = self.ppo.choose_action(s)
+                    break
                 
                 s_, r, event_r, done, info = self.env.step(a)
                 vpred = self.ppo.get_v(s)
-
-                if DEMO_MODE and (info == 'goal' or info == 'crash'):
-                    done = False
 
                 # if self.wid == 0:
                 #     vpred_ = self.ppo.get_v(s_)
                 #     td = event_r + GAMMA*vpred_ - vpred
                 #     print("a: %i | event_r: %7.4f| vpred: %7.4f| TD: %7.4f| " %(a, event_r, vpred, td))
 
-                if DEMO_MODE == False or (DEMO_MODE and info != 'crash'):
-                # if info != 'crash':
-                    buffer_s.append(s*1)
-                    buffer_a.append(a)
-                    buffer_r.append(r)                    # normalize reward, find to be useful
-                    buffer_er.append(event_r)
-                    buffer_vpred.append(vpred)
-                    buffer_done.append(done)
-                    s_demo = s_*1
-                    GLOBAL_UPDATE_COUNTER += 1               # count to minimum batch size, no need to wait other workers
+                buffer_s.append(s*1)
+                buffer_a.append(a)
+                buffer_r.append(r)                    # normalize reward, find to be useful
+                buffer_er.append(event_r)
+                buffer_vpred.append(vpred)
+                buffer_done.append(done)
+                s_demo = s_*1
+                GLOBAL_UPDATE_COUNTER += 1               # count to minimum batch size, no need to wait other workers
 
                 s = s_
-                ep_step += 1
                 t += 1
-                # mb_t += 1
-                
-                # if info == 'crash':
-                #     retry = True
-                #     mb_t = 0
 
-                # if np.random.rand() > 0.8:
-                #     num_saved += 1
-                #     self.env.save_ep()
-
-                if done or GLOBAL_UPDATE_COUNTER >= ep_batch_size or t == ep_length-1:
-                    # if num_saved < 100 and done == False:
-                    #     num_saved += 1
-                    #     self.env.save_ep()
-                    # if len(buffer_r) < 2 and info == 'crash':
-                    #     buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, buffer_return, buffer_adv, buffer_done = [], [], [], [], [], [], [], []
-                    #     continue
-
-                    if DEMO_MODE:
-                        if len(buffer_a) == 0:
-                            buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, buffer_return, buffer_adv, buffer_done = [], [], [], [], [], [], [], []
-                            break
-                        else:
-                            buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, s_ = self.process_demo_path(buffer_a, s_demo)
-
-                    # vpred_ = 0
+                if done or GLOBAL_UPDATE_COUNTER >= BATCH_SIZE or t == len(test_actions)-1:
                     if done:
                         vpred_ = 0
                     else:
@@ -524,7 +458,6 @@ class Worker(object):
                     buffer_adv = np.zeros(len(buffer_r))
 
                     lastgaelam = 0.0
-
                     if np.count_nonzero(buffer_er) == 0 or True:
                         reward = buffer_r
                     else:
@@ -533,9 +466,6 @@ class Worker(object):
                     # vpred_temp = buffer_vpred*1
                     # buffer_vpred = np.zeros_like(buffer_vpred)
                     for index in reversed(range(len(buffer_r))):
-                        # if index == len(buffer_r)-1:
-                        #     nonterminal = 1-done
-                        # else:
                         nonterminal = 1
                         delta = reward[index] + GAMMA * buffer_vpred[index+1] * nonterminal - buffer_vpred[index]
                         lastgaelam = delta + GAMMA * LAM * nonterminal * lastgaelam
@@ -543,66 +473,16 @@ class Worker(object):
                         # print (index, len(buffer_r), nonterminal, delta, lastgaelam, buffer_adv[index])
                     buffer_return = buffer_adv + buffer_vpred[:-1]
 
-                    # add more sample from terminal state
-                    if done:
-                        last_a = buffer_a[-1]
-                        last_s = buffer_s[-1]
-                        a_prob = self.ppo.get_action_prob(last_s)
-                        last_a_prob = a_prob[last_a]
-                        max_prob = a_prob.max()
-                        min_prob = a_prob.min() + 1e-8
-                        if (info == 'goal' and last_a_prob < max_prob/2):
-                            resample_num = (max_prob/2)/last_a_prob
-                        elif (info == 'crash' and last_a_prob > max_prob/2):
-                            resample_num = last_a_prob/(max_prob/2)
-                        else:
-                            resample_num = 0
-                        for num in range(int(resample_num)):
-                            buffer_s.append(last_s)
-                            buffer_a.append(last_a)
-                            buffer_return = np.append(buffer_return, buffer_return[-1])
-                            buffer_adv = np.append(buffer_adv, buffer_adv[-1])
-                            reward.append(0)
-                            if num > 10:
-                                break
-                        print(info, last_a_prob, min_prob, max_prob, resample_num)
-                            
-
-                    # if np.count_nonzero(buffer_er) == 0:
-                    #     buffer_adv = buffer_adv * 0.01
-                    #     buffer_adv = buffer_r
-                    #     reward = buffer_r
-                        # buffer_return = buffer_vpred[:-1]
-                    #     buffer_adv = np.asarray(buffer_adv)  
-                    # else:
-                    #     reward = buffer_er
-                    #     buffer_adv = np.asarray(buffer_adv)  
-
-
-                    # buffer_return = self.discount(buffer_er, GAMMA)
-                    # buffer_adv = self.compute_gae(buffer_er, buffer_vpred)
-        
                     # for i in range(len(buffer_r)):
                     #     print(buffer_a[i], 'ret', buffer_return[i], 'pred', buffer_vpred[i], 'adv', buffer_adv[i], buffer_r[i])
                     # print(DEMO_MODE, info)
-
-                    # if self.wid == 0:
-                    #     print(reward)
-                    #     print (buffer_return)
-                    #     print(buffer_vpred)
-                    #     print (buffer_adv)
-
 
                     bs, ba, bret, brew, badv = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return)[:, np.newaxis], np.array(reward)[:, np.newaxis], np.array(buffer_adv)[:, np.newaxis]
 
                     buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, buffer_return, buffer_adv, buffer_done = [], [], [], [], [], [], [], []
                 
-                    
                     QUEUE.put(np.hstack((bs, ba, bret, brew, badv)))          # put data in the queue
-                    if GLOBAL_UPDATE_COUNTER >= ep_batch_size:
-                        # if DEMO_MODE == False:
-                        #     self.env.clear_history_leave_one()
-
+                    if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE:
                         ROLLING_EVENT.clear()       # stop collecting data
                         UPDATE_EVENT.set()          # globalPPO update
 
@@ -610,16 +490,8 @@ class Worker(object):
                         COORD.request_stop()
                         break
 
-                    if info == 'goal' or info == 'out' or t == ep_length-1:
+                    if info == 'goal' or info == 'out' or t == len(test_actions)-1:
                         break 
-
-                    # if DEMO_MODE == False and (t == ep_length-1 or done):
-                    #     break 
-
-                    # if DEMO_MODE == False and retry and t < ep_length-1:
-                    #     s = self.env.reset(0, 5, 0) 
-                    #     retry = False
-
 
             GLOBAL_EP += 1
 

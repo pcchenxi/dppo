@@ -15,21 +15,23 @@ print ('import env vrep')
 action_list = []
 for x in range(-1, 2):
     for y in range(-1, 2):
-        for w in range(-1, 2):
-            for h in range(-1, 2):
-                for l in range(-1, 2):
-                    action = []
-                    action.append(x)
-                    action.append(y)
-                    action.append(w)
-                    action.append(h)
-                    action.append(l)
+        # for w in range(-1, 2):
+        #     for h in range(-1, 2):
+        #         for l in range(-1, 2):
+        action = []
+        action.append(x)
+        action.append(y)
+        action.append(0)
+        action.append(0)
+        action.append(0)
 
-                    if np.count_nonzero(action) == 0:
-                        continue 
+        if np.count_nonzero(action) == 0:
+            continue 
 
-                    action_list.append(action)
-                    # print action_list
+        action_list.append(action)
+        # print action_list
+
+print(action_list)
 
 observation_range = 1.5
 
