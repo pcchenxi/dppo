@@ -16,20 +16,20 @@ action_list = []
 for x in range(-1, 2):
     for y in range(-1, 2):
         for w in range(-1, 2):
-            # for h in range(-1, 2):
-            #     for l in range(-1, 2):
-            action = []
-            action.append(x)
-            action.append(y)
-            action.append(w)
-            action.append(0)
-            action.append(0)
+            for h in range(-1, 2):
+                for l in range(-1, 2):
+                    action = []
+                    action.append(x)
+                    action.append(y)
+                    action.append(w)
+                    action.append(h)
+                    action.append(l)
 
-            if np.count_nonzero(action) == 0:
-                continue 
+                    if np.count_nonzero(action) == 0:
+                        continue 
 
-            action_list.append(action)
-            # print action_list
+                    action_list.append(action)
+                    # print action_list
 
 observation_range = 1.5
 
@@ -48,7 +48,7 @@ action_space = len(action_list)
 # action_type = spaces.Box(-1, 1, shape = (action_space,))
 action_type = spaces.Discrete(action_space)
 
-REWARD_GOAL = 50
+REWARD_GOAL = 100
 REWARD_STEP =  -0.05
 REWARD_CRASH = -1 #REWARD_STEP*10
 
@@ -68,6 +68,8 @@ class Simu_env():
         self.total_ep_reward = REWARD_GOAL
         self.goal_reached = False
         self.goal_counter = 0
+
+        self.ep_count = 0
 
         self.init_step = 0
         # self.object_num = 0
@@ -135,7 +137,10 @@ class Simu_env():
         self.collide_num = 0
         self.ep_step = 0
         self.state_pre = []
-        res, retInts, retFloats, retStrings, retBuffer = self.call_sim_function('centauro', 'reset', [observation_range*2, env_mode, reset_mode, save_ep])        
+        target_dist = 0.15+0.4*self.ep_count/3000
+        if target_dist > 1:
+            target_dist = 1
+        res, retInts, retFloats, retStrings, retBuffer = self.call_sim_function('centauro', 'reset', [target_dist, env_mode, reset_mode, save_ep])        
         # state, reward, min_dist, obs_count, is_finish, info = self.step([0, 0, 0, 0, 0])
         state, reward, event_reward,is_finish, info = self.step([0, 0, 0, 0, 0])
 
@@ -143,6 +148,8 @@ class Simu_env():
         self.ep_init = False        
         self.collide_num = 0
         self.total_ep_reward = REWARD_GOAL
+
+        self.ep_count += 1
         return state
 
     def step(self, action): 

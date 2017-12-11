@@ -12,15 +12,15 @@ import matplotlib.pyplot as plt
 
 EP_MAX = 500000
 EP_LEN = 100
-N_WORKER = 1               # parallel workers
-GAMMA = 0.9                 # reward discount factor
+N_WORKER = 7               # parallel workers
+GAMMA = 0.97                # reward discount factor
 LAM = 0.92
 A_LR = 0.0001               # learning rate for actor
-C_LR = 0.0002               # learning rate for critic
-LR = 0.001
+C_LR = 0.0001               # learning rate for critic
+LR = 0.00001
 
-BATCH_SIZE = 128
-MIN_BATCH_SIZE = 32       # minimum batch size for updating PPO
+BATCH_SIZE = 10240
+MIN_BATCH_SIZE = 256       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
@@ -41,7 +41,6 @@ class PPO(object):
 
         # actor
         pi, self.v, net_params = self._build_anet('net', self.tfs, trainable=True)
-        training_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='net')
 
         oldpi, oldv, oldnet_params = self._build_anet('oldnet', self.tfs, trainable=False)
         self.sample_op = pi.sample() #tf.squeeze(pi.sample(1), axis=0)  # operation of choosing action
@@ -55,20 +54,22 @@ class PPO(object):
             self.tfa = tf.placeholder(tf.int32, [None], 'action')
         self.tfadv = tf.placeholder(tf.float32, [None], 'advantage')
 
-        a_prob = tf.reduce_sum(pi.logits * tf.one_hot(self.tfa, A_DIM, dtype=tf.float32), axis=1, keep_dims=True)
-        olda_prob = tf.reduce_sum(oldpi.logits * tf.one_hot(self.tfa, A_DIM, dtype=tf.float32), axis=1, keep_dims=True)
-        self.ratio = a_prob/(olda_prob + 1e-8)
+        a_prob = tf.reduce_sum(tf.nn.softmax(pi.logits) * tf.one_hot(self.tfa, A_DIM, dtype=tf.float32), axis=1, keep_dims=True)
+        olda_prob = tf.reduce_sum(tf.nn.softmax(oldpi.logits) * tf.one_hot(self.tfa, A_DIM, dtype=tf.float32), axis=1, keep_dims=True)
+        # self.ratio = a_prob/(olda_prob + 1e-8)
         # ratio = tf.exp(pi.log_prob(self.tfa) - oldpi.log_prob(self.tfa))
         # ratio = pi.prob(self.tfa) / (oldpi.prob(self.tfa) + 1e-5)
-        # self.ratio = tf.exp(oldpi.neglogp(self.tfa) - pi.neglogp(self.tfa))
+        self.ratio = tf.exp(oldpi.neglogp(self.tfa) - pi.neglogp(self.tfa))
 
         self.surr = self.ratio * self.tfadv                       # surrogate loss
         self.surr2 = tf.clip_by_value(self.ratio, 1. - EPSILON, 1. + EPSILON) * self.tfadv
         self.aloss = -tf.reduce_mean(tf.minimum(self.surr, self.surr2))
 
         self.entropy = tf.reduce_mean(pi.entropy())
-        self.atrain_op = tf.train.AdamOptimizer(A_LR).minimize(self.aloss)
 
+        a_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='net/actor')
+        self.atrain_op = tf.train.AdamOptimizer(A_LR).minimize(self.aloss, var_list = a_params)
+        print(a_params)
         # critic
         # self.feature = self._build_feature_net('feature', self.tfs)
         # l1 = tf.layers.dense(self.feature, 100, tf.nn.relu)
@@ -79,8 +80,10 @@ class PPO(object):
         self.closs1 = tf.square(self.tfdc_r - self.v)
         self.closs2 = tf.square(self.tfdc_r - vpredclipped)
 
-        self.closs = 0.5 * tf.reduce_mean(self.closs1) #tf.reduce_mean(tf.maximum(self.closs1, self.closs2))
-        self.ctrain_op = tf.train.AdamOptimizer(C_LR).minimize(self.closs)
+        self.closs = tf.reduce_mean(self.closs1) #tf.reduce_mean(tf.maximum(self.closs1, self.closs2))
+        c_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='net/value')
+        print(c_params)
+        self.ctrain_op = tf.train.AdamOptimizer(C_LR).minimize(self.closs, var_list = c_params)
 
         self.total_loss = self.aloss + self.closs*0.5 - 0.0*self.entropy
 
@@ -88,14 +91,15 @@ class PPO(object):
         # with tf.control_dependencies(update_ops):
         #     self.train_op = tf.train.AdamOptimizer(LR).minimize(self.total_loss)
 
-        self.train_op = tf.train.AdamOptimizer(LR).minimize(self.total_loss, var_list = training_params)
+        total_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='net')
+        self.train_op = tf.train.AdamOptimizer(LR).minimize(self.total_loss, var_list = total_params)
 
         self.sess.run(tf.global_variables_initializer())
 
         self.saver = tf.train.Saver()
         self.summary_writer = tf.summary.FileWriter('./log', self.sess.graph)    
-        self.pi_prob = pi.logits
-        self.oldpi_prob = oldpi.logits
+        self.pi_prob = tf.nn.softmax(pi.logits)
+        self.oldpi_prob = tf.nn.softmax(oldpi.logits)
 
         self.a_prob = a_prob
         self.olda_prob = olda_prob
@@ -186,14 +190,12 @@ class PPO(object):
         # w_init = tf.zeros_initializer()
         w_init = tf.random_normal_initializer(0., .1)
         with tf.variable_scope(name):
-            self.feature_a = self._build_feature_net('feature_a', input_state, trainable=trainable)
-            self.feature_v = self._build_feature_net('feature_v', input_state, trainable=trainable)
-
             with tf.variable_scope('actor'):
                 # l1 = tf.layers.dense(self.tfs, 200, tf.nn.relu, trainable=trainable)
                 # mu = 1 * tf.layers.dense(self.feature, A_DIM, tf.nn.tanh, kernel_initializer=w_init, trainable=trainable)
                 # sigma = tf.layers.dense(self.feature, A_DIM, tf.nn.softplus, kernel_initializer=w_init, trainable=trainable)
                 # norm_dist = tf.distributions.Normal(loc=mu, scale=sigma)
+                self.feature_a = self._build_feature_net('feature_a', input_state, trainable=trainable)
                 if isinstance(Action_Space, gym.spaces.Box):
                     print('continue action')
                     pi = tf.layers.dense(self.feature_a, A_DIM, kernel_initializer=w_init, trainable=trainable)
@@ -202,9 +204,10 @@ class PPO(object):
                 else:
                     print('discrate action')
                     # pdparam = tf.layers.dense(self.feature_a, A_DIM, kernel_initializer=w_init, trainable=trainable)  
-                    pdparam = tf.layers.dense(self.feature_a, A_DIM, tf.nn.softmax, kernel_initializer=w_init, trainable=trainable)      
+                    pdparam = tf.layers.dense(self.feature_a, A_DIM, kernel_initializer=w_init, trainable=trainable)      
 
             with tf.variable_scope('value'):
+                self.feature_v = self._build_feature_net('feature_v', input_state, trainable=trainable)
                 v = tf.layers.dense(self.feature_v, 1, trainable=trainable)
                 # v = tf.clip_by_value(v, 0, centauro_env.REWARD_GOAL)
 
@@ -216,13 +219,18 @@ class PPO(object):
 
     def choose_action(self, s):
         s = s[np.newaxis, :]
-        # a = self.sess.run(self.sample_op, {self.tfs: s, self.tf_is_train: False})[0]
-        prob_weights = self.sess.run(self.pi_prob, feed_dict={self.tfs: s})
-        a = np.random.choice(range(prob_weights.shape[1]),
-                                  p=prob_weights.ravel())
+        a = self.sess.run(self.sample_op, {self.tfs: s, self.tf_is_train: False})[0]
+        # prob_weights = self.sess.run(self.pi_prob, feed_dict={self.tfs: s})
+        # a = np.random.choice(range(prob_weights.shape[1]),
+        #                           p=prob_weights.ravel())
         if isinstance(Action_Space, gym.spaces.Box):
             a = np.clip(a, -1, 1)
         return a
+
+    def get_action_prob(self, s):
+        s = s[np.newaxis, :]
+        prob = self.sess.run(self.pi_prob, {self.tfs: s})[0]
+        return prob
 
     def get_v(self, s):
         if s.ndim < 2: s = s[np.newaxis, :]
@@ -302,7 +310,8 @@ class PPO(object):
                         self.tf_is_train: True
                     }
 
-                    self.sess.run(self.train_op, feed_dict = feed_dict)
+                    # self.sess.run(self.train_op, feed_dict = feed_dict)
+                    self.sess.run([self.atrain_op, self.ctrain_op], feed_dict = feed_dict)
 
                 tloss, aloss, vloss, entropy = self.check_overall_loss(s, a, r, adv)
                 print("aloss: %7.4f|, vloss: %7.4f| entropy: %7.4f" % (aloss, vloss, entropy))
@@ -318,11 +327,11 @@ class PPO(object):
             # for i in range(len(r)):
             #     print(onehota_prob[i], oldhota_prob[i], ratio[i])
 
-            ratio, surr, surr2, a_prob = self.sess.run([self.ratio, self.surr, self.surr2, self.pi_prob], feed_dict = feed_dict)
+            ratio, surr, surr2, a_prob, vpred_new = self.sess.run([self.ratio, self.surr, self.surr2, self.pi_prob, self.v], feed_dict = feed_dict)
             ratio = ratio.flatten()
             for i in range(len(r)):
                 act = int(a[i])
-                print("%8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %6.0i, %8.4f, %8.4f"%(reward[i], r[i], vpred[i], adv[i], adv[i], ratio[i], a[i], olda_prob[i][act],a_prob[i][act]))
+                print("%8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %6.0i, %8.4f, %8.4f"%(reward[i], r[i], vpred[i], vpred_new[i], adv[i], ratio[i], a[i], olda_prob[i][act],a_prob[i][act]))
             # ratio_clip = np.clip(ratio, 1-EPSILON, 1+EPSILON)
             # surr_ = ratio*adv.flatten()
             # surr2_ = ratio_clip*adv.flatten()
@@ -397,8 +406,8 @@ class Worker(object):
             , Crash_states, Crash_count, Crash_return, Crash_buffer_full \
             , History_states, History_count, History_adv, History_return, History_buffer_full
 
-        self.env.save_ep()
-        s = self.env.reset( 0, 1, 0)
+        # self.env.save_ep()
+        # s = self.env.reset( 0, 1, 0)
 
         ep_count = 0
         while not COORD.should_stop():
@@ -407,14 +416,14 @@ class Worker(object):
             ep_step = 0
             a_demo = np.random.randint(A_DIM) # np.array([-1, 0, 0, 0, 0])
             info = 'unfinish'
-            # if ep_count%10 == 1 or ep_count == 1:
-                # self.env.clear_history()
+            if ep_count%20 == 1 or ep_count == 1:
+                self.env.clear_history()
                 # self.env.clear_history_leave_one()
-                # self.env.reset(0, 0, 0)
-                # self.env.save_ep()
-                # num_saved = 0
+                self.env.reset(0, 0, 0)
+                self.env.save_ep()
+                num_saved = 0
 
-            if ep_count%5 == 0:
+            if ep_count%5 == 0 and False:
                 s = self.env.reset(0, 4, 0)
                 ep_length = int(EP_LEN)
                 DEMO_MODE = True
@@ -484,8 +493,12 @@ class Worker(object):
                 #     retry = True
                 #     mb_t = 0
 
+                # if np.random.rand() > 0.8:
+                #     num_saved += 1
+                #     self.env.save_ep()
+
                 if done or GLOBAL_UPDATE_COUNTER >= ep_batch_size or t == ep_length-1:
-                    # if num_saved < 5 and done == False:
+                    # if num_saved < 100 and done == False:
                     #     num_saved += 1
                     #     self.env.save_ep()
                     # if len(buffer_r) < 2 and info == 'crash':
@@ -500,10 +513,10 @@ class Worker(object):
                             buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, s_ = self.process_demo_path(buffer_a, s_demo)
 
                     # vpred_ = 0
-                    # if done:
-                    #     vpred_ = 0
-                    # else:
-                    vpred_ = self.ppo.get_v(s_)
+                    if done:
+                        vpred_ = 0
+                    else:
+                        vpred_ = self.ppo.get_v(s_)
 
                     buffer_done.append(0)
                     buffer_vpred.append(vpred_)
@@ -530,8 +543,33 @@ class Worker(object):
                         # print (index, len(buffer_r), nonterminal, delta, lastgaelam, buffer_adv[index])
                     buffer_return = buffer_adv + buffer_vpred[:-1]
 
-                    if np.count_nonzero(buffer_er) == 0:
-                        buffer_adv = buffer_adv * 0.01
+                    # add more sample from terminal state
+                    if done:
+                        last_a = buffer_a[-1]
+                        last_s = buffer_s[-1]
+                        a_prob = self.ppo.get_action_prob(last_s)
+                        last_a_prob = a_prob[last_a]
+                        max_prob = a_prob.max()
+                        min_prob = a_prob.min() + 1e-8
+                        if (info == 'goal' and last_a_prob < max_prob/2):
+                            resample_num = (max_prob/2)/last_a_prob
+                        elif (info == 'crash' and last_a_prob > max_prob/2):
+                            resample_num = last_a_prob/(max_prob/2)
+                        else:
+                            resample_num = 0
+                        for num in range(int(resample_num)):
+                            buffer_s.append(last_s)
+                            buffer_a.append(last_a)
+                            buffer_return = np.append(buffer_return, buffer_return[-1])
+                            buffer_adv = np.append(buffer_adv, buffer_adv[-1])
+                            reward.append(0)
+                            if num > 10:
+                                break
+                        print(info, last_a_prob, min_prob, max_prob, resample_num)
+                            
+
+                    # if np.count_nonzero(buffer_er) == 0:
+                    #     buffer_adv = buffer_adv * 0.01
                     #     buffer_adv = buffer_r
                     #     reward = buffer_r
                         # buffer_return = buffer_vpred[:-1]

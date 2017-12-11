@@ -19,7 +19,7 @@ _init_target_dist = 1
 _target_dist = _init_target_dist
 
 _new_ep_prob = 0
-_modifly_prob = 0.9
+_modifly_prob = 0
 
 function start()
     -- sleep (3)
@@ -106,6 +106,7 @@ end
 
 function reset(inInts,inFloats,inStrings,inBuffer)
     local radius = inFloats[1]
+    _init_target_dist = radius
     local env_mode = inFloats[2] --   0: random environment   1: target environment 
     local reset_mode = inFloats[3] 
     --   0: pure random ep        1: allow replay buffer    2: continue... only change target position   3: play by user  4: close to goal  5: after collide 
