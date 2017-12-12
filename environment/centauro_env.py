@@ -248,14 +248,14 @@ class Simu_env():
         # print(obs_count)
 
         if found_pose == bytearray(b"a"):       # when collision or no pose can be found
-            is_finish = True
+            # is_finish = True
             event_reward = REWARD_CRASH
             # print('crash a')
             # reward = reward*10       
             info = 'crash'
 
         if found_pose == bytearray(b"c"):       # when collision or no pose can be found
-            is_finish = True
+            # is_finish = True
             event_reward = REWARD_CRASH
             # print('crash')
             # reward = reward * 10

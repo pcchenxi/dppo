@@ -221,6 +221,7 @@ class PPO(object):
         # prob_weights = self.sess.run(self.pi_prob, feed_dict={self.tfs: s})
         # a = np.random.choice(range(prob_weights.shape[1]),
         #                           p=prob_weights.ravel())
+
         if isinstance(Action_Space, gym.spaces.Box):
             a = np.clip(a, -1, 1)
         return a
@@ -228,6 +229,11 @@ class PPO(object):
     def get_action_prob(self, s):
         s = s[np.newaxis, :]
         prob = self.sess.run(self.pi_prob, {self.tfs: s})[0]
+
+        plt.clf()
+        plt.scatter(range(A_DIM+1), np.append(prob, 1.0).flatten())
+        plt.pause(0.01)
+
         return prob
 
     def get_v(self, s):
@@ -318,7 +324,7 @@ class PPO(object):
 
             ratio, surr, surr2, a_prob, vpred_new = self.sess.run([self.ratio, self.surr, self.surr2, self.pi_prob, self.v], feed_dict = feed_dict)
             ratio = ratio.flatten()
-            for i in range(20): #range(len(r)):
+            for i in range(25): #range(len(r)):
                 act = int(a[i])
                 output = []
                 output.append(reward[i][0])
@@ -418,14 +424,17 @@ class Worker(object):
             s = self.env.reset(0, 1, 0)
             t = 0
             
-            test_actions = [3, 3, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 4, 4]
-
+            # test_actions = [3, 3, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 4, 4]
+            test_actions = [3, 3, 5, 5, 5, 5, 5, 4, 4, 3, 3, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 4, 4]
             for a in test_actions:
+            # while(1):
                 if not ROLLING_EVENT.is_set():                  # while global PPO is updating
                     ROLLING_EVENT.wait()                        # wait until PPO is updated
                     buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, buffer_return, buffer_adv = [], [], [], [], [], [], []
                     break
                 
+                self.ppo.get_action_prob(s)
+                # a = self.ppo.choose_action(s)
                 s_, r, event_r, done, info = self.env.step(a)
                 vpred = self.ppo.get_v(s)
 
