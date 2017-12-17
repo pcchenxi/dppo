@@ -205,15 +205,15 @@ function get_obstacle_info(inInts,inFloats,inStrings,inBuffer)
     local obs_info = {}
     for i=1, #_obs_hds, 1 do 
         -- local pos = simGetObjectPosition(_obs_hds[i], -1)
-        local pos = simGetObjectPosition(_obs_hds[i], -1)
+        local pos = simGetObjectPosition(_obs_hds[i], _robot_hd)
         local robot_pos =simGetObjectPosition(_robot_hd,-1)
         local res, type, dim = simGetShapeGeomInfo(_obs_hds[i])
-        obs_info[#obs_info+1] = pos[1] - robot_pos[1]
-        obs_info[#obs_info+1] = pos[2] - robot_pos[2]
+        obs_info[#obs_info+1] = pos[1]
+        obs_info[#obs_info+1] = pos[2]
 
         obs_info[#obs_info+1] = dim[1]
         obs_info[#obs_info+1] = dim[2]
-        obs_info[#obs_info+1] = dim[3]
+        obs_info[#obs_info+1] = pos[3] --dim[3]
 
         -- print('shape: ', dim[1], dim[2], dim[3], dim[4])
     end
@@ -261,7 +261,7 @@ function get_robot_state(inInts,inFloats,inStrings,inBuffer)
         state[#state+1] = obs_pos[3]
         state[#state+1] = obs_pos_g[3]
     end
-    state[#state+1] = ori[3]
+    -- state[#state+1] = ori[3]
     state[#state+1] = pos[3]
     state[#state+1] = leg_l - _start_l
 

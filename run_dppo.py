@@ -11,18 +11,18 @@ import time
 import matplotlib.pyplot as plt
 
 EP_MAX = 500000
-EP_LEN = 100
+EP_LEN = 500
 N_WORKER = 1               # parallel workers
-GAMMA = 0.97                # reward discount factor
-LAM = 0.92
+GAMMA = 0.98                # reward discount factor
+LAM = 0.95
 A_LR = 0.0001               # learning rate for actor
-C_LR = 0.0001               # learning rate for critic
-LR = 0.00001
+C_LR = 0.0005               # learning rate for critic
+LR = 0.0001
 
-BATCH_SIZE = 128
-MIN_BATCH_SIZE = 32       # minimum batch size for updating PPO
+BATCH_SIZE = 512
+MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
 
-UPDATE_STEP = 5            # loop update operation n-steps
+UPDATE_STEP = 10            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
 GAME = 'Pendulum-v0'
 S_DIM, A_DIM = centauro_env.observation_space, centauro_env.action_space 
@@ -63,12 +63,20 @@ class PPO(object):
 
         self.surr = self.ratio * self.tfadv                       # surrogate loss
         self.surr2 = tf.clip_by_value(self.ratio, 1. - EPSILON, 1. + EPSILON) * self.tfadv
+        l2 = tf.reduce_mean(tf.square(self.ratio - 1)) * 10
         self.aloss = -tf.reduce_mean(tf.minimum(self.surr, self.surr2))
 
         self.entropy = tf.reduce_mean(pi.entropy())
 
         a_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='net/actor')
+        a_grads = tf.gradients(self.aloss, a_params)
+        a_grads, a_grad_norm = tf.clip_by_global_norm(a_grads, 5)
+
+        a_grads = list(zip(a_grads, a_params))
+        a_optimizer = tf.train.AdamOptimizer(learning_rate=A_LR, epsilon=1e-5)
+        # self.atrain_op = a_optimizer.apply_gradients(a_grads)
         self.atrain_op = tf.train.AdamOptimizer(A_LR).minimize(self.aloss, var_list = a_params)
+        
         # critic
         # self.feature = self._build_feature_net('feature', self.tfs)
         # l1 = tf.layers.dense(self.feature, 100, tf.nn.relu)
@@ -81,6 +89,12 @@ class PPO(object):
 
         self.closs = tf.reduce_mean(self.closs1) #tf.reduce_mean(tf.maximum(self.closs1, self.closs2))
         c_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='net/value')
+        c_grads = tf.gradients(self.closs, c_params)
+        c_grads, c_grad_norm = tf.clip_by_global_norm(c_grads, 0.5)
+
+        c_grads = list(zip(c_grads, c_params))
+        c_optimizer = tf.train.AdamOptimizer(learning_rate=C_LR, epsilon=1e-5)
+        # self.ctrain_op = c_optimizer.apply_gradients(c_grads)
         self.ctrain_op = tf.train.AdamOptimizer(C_LR).minimize(self.closs, var_list = c_params)
 
         self.total_loss = self.aloss + self.closs*0.5 - 0.0*self.entropy
@@ -90,7 +104,7 @@ class PPO(object):
         #     self.train_op = tf.train.AdamOptimizer(LR).minimize(self.total_loss)
 
         total_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='net')
-        self.train_op = tf.train.AdamOptimizer(LR).minimize(self.total_loss, var_list = total_params)
+        self.train_op = tf.train.AdamOptimizer(LR).minimize(self.total_loss)
 
         self.sess.run(tf.global_variables_initializer())
 
@@ -101,7 +115,7 @@ class PPO(object):
 
         self.a_prob = a_prob
         self.olda_prob = olda_prob
-        # self.load_model()   
+        self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')
@@ -144,8 +158,8 @@ class PPO(object):
         # w_init = tf.zeros_initializer()
         w_init = tf.random_normal_initializer(0., .1)
         with tf.variable_scope(name):
-            state_size = 5
-            num_img = S_DIM - state_size - 1# 
+            state_size = 4
+            num_img = S_DIM - state_size 
             img_size = int(math.sqrt(num_img))
             print(num_img, img_size)
 
@@ -160,14 +174,14 @@ class PPO(object):
             # ob_state = tf.concat([ob_state , index_in_ep], 1, name = 'concat_ob')
             reshaped_grid = tf.reshape(ob_grid,shape=[-1, img_size, img_size, 1]) 
 
-            # x = tf.layers.conv2d(inputs=reshaped_grid, filters=32, kernel_size=[3, 3], padding="valid", activation=tf.nn.tanh)
-            # x = tf.layers.conv2d(inputs=x, filters=64, kernel_size=[3, 3], padding="valid", activation=tf.nn.tanh)
-            # x = tf.contrib.layers.flatten(x)
+            x = tf.layers.conv2d(inputs=reshaped_grid, filters=16, kernel_size=[3, 3], padding="valid", activation=tf.nn.tanh, trainable=trainable )
+            x = tf.layers.conv2d(inputs=x, filters=32, kernel_size=[3, 3], padding="valid", activation=tf.nn.tanh, trainable=trainable )
+            x = tf.contrib.layers.flatten(x)
             # x = tf.layers.dense(inputs=x, units=1024, activation=tf.nn.tanh)
 
             # x = (ob_grid - 0.5)*2
-            x = tf.layers.dense(ob_grid, 50, tf.nn.tanh, kernel_initializer=w_init, name='x_fc1', trainable=trainable )
-            x = tf.layers.dense(x, 25, tf.nn.tanh, kernel_initializer=w_init, name='x_fc2', trainable=trainable )
+            # x = tf.layers.dense(ob_grid, 50, tf.nn.tanh, kernel_initializer=w_init, name='x_fc1', trainable=trainable )
+            # x = tf.layers.dense(x, 25, tf.nn.tanh, kernel_initializer=w_init, name='x_fc2', trainable=trainable )
             # x = self.add_layer(ob_grid, 50, 'x_fc1', ac = tf.nn.tanh)
             # x = self.add_layer(x, 25, 'x_fc2', ac = tf.nn.tanh)
 
@@ -177,8 +191,8 @@ class PPO(object):
             
             feature = tf.concat([x , ob_state], 1, name = 'concat')
             # feature = state_rt
-            feature = tf.layers.dense(feature, 50, tf.nn.tanh, name='feature_fc', trainable=trainable )
-            feature = tf.layers.dense(feature, 50, tf.nn.tanh, name='feature_fc2', trainable=trainable )
+            # feature = tf.layers.dense(feature, 256, tf.nn.tanh, name='feature_fc', trainable=trainable )
+            # feature = tf.layers.dense(feature, 256, tf.nn.tanh, name='feature_fc2', trainable=trainable )
             # feature = self.add_layer(feature, 50, 'feature_fc', tf.nn.tanh)
             # feature = self.add_layer(feature, 25, 'feature_fc2', tf.nn.tanh)
         return feature
@@ -188,25 +202,29 @@ class PPO(object):
         # w_init = tf.zeros_initializer()
         w_init = tf.random_normal_initializer(0., .1)
         with tf.variable_scope(name):
+            self.feature = self._build_feature_net('feature', input_state, trainable=trainable)
             with tf.variable_scope('actor'):
-                # l1 = tf.layers.dense(self.tfs, 200, tf.nn.relu, trainable=trainable)
+                l1 = tf.layers.dense(self.feature, 256, tf.nn.tanh, trainable=trainable)
+                l1 = tf.layers.dense(l1, 256, tf.nn.tanh, trainable=trainable)
                 # mu = 1 * tf.layers.dense(self.feature, A_DIM, tf.nn.tanh, kernel_initializer=w_init, trainable=trainable)
                 # sigma = tf.layers.dense(self.feature, A_DIM, tf.nn.softplus, kernel_initializer=w_init, trainable=trainable)
                 # norm_dist = tf.distributions.Normal(loc=mu, scale=sigma)
-                self.feature_a = self._build_feature_net('feature_a', input_state, trainable=trainable)
+                # self.feature_a = self._build_feature_net('feature_a', input_state, trainable=trainable)
                 if isinstance(Action_Space, gym.spaces.Box):
                     print('continue action')
-                    pi = tf.layers.dense(self.feature_a, A_DIM, kernel_initializer=w_init, trainable=trainable)
+                    pi = tf.layers.dense(l1, A_DIM, kernel_initializer=w_init, trainable=trainable)
                     logstd = tf.get_variable(name="logstd", shape=[1, A_DIM], initializer=tf.zeros_initializer(), trainable=trainable)
                     pdparam = tf.concat([pi, pi * 0.0 + logstd], axis=1)
                 else:
                     print('discrate action')
                     # pdparam = tf.layers.dense(self.feature_a, A_DIM, kernel_initializer=w_init, trainable=trainable)  
-                    pdparam = tf.layers.dense(self.feature_a, A_DIM, kernel_initializer=w_init, trainable=trainable)      
+                    pdparam = tf.layers.dense(l1, A_DIM, kernel_initializer=w_init, trainable=trainable)      
 
             with tf.variable_scope('value'):
-                self.feature_v = self._build_feature_net('feature_v', input_state, trainable=trainable)
-                v = tf.layers.dense(self.feature_v, 1, trainable=trainable)
+                # self.feature_v = self._build_feature_net('feature_v', input_state, trainable=trainable)
+                l2 = tf.layers.dense(self.feature, 256, tf.nn.tanh, trainable=trainable)
+                l2 = tf.layers.dense(l2, 256, tf.nn.tanh, trainable=trainable)
+                v = tf.layers.dense(l2, 1, trainable=trainable)
                 # v = tf.clip_by_value(v, 0, centauro_env.REWARD_GOAL)
 
         pdtype = make_pdtype(Action_Space)
@@ -252,6 +270,71 @@ class PPO(object):
         tloss, aloss, vloss, entropy = self.sess.run([self.total_loss, self.aloss, self.closs, self.entropy], feed_dict = feed_dict)
         return tloss, aloss, vloss, entropy 
 
+    def seperate_adv(self, buffer_adv):
+        possitive_index = []
+        negative_index = []
+        for index in range(len(buffer_adv)):
+            if buffer_adv[index] == 0:
+                continue
+            if buffer_adv[index] > 0:
+                possitive_index.append(index)
+            else:
+                negative_index.append(index)
+        return possitive_index, negative_index
+
+    def get_minibatch(self, s, a, r, adv, possitive_index, negative_index):
+        sub_s, sub_a, sub_r, sub_adv = [], [], [], []
+        if len(possitive_index) != 0 and len(negative_index) != 0:
+            size = int(MIN_BATCH_SIZE/2)
+            selected_index = np.random.choice(len(possitive_index), size)
+            for i in selected_index:
+                index = possitive_index[i]
+                sub_s.append(s[index])
+                sub_a.append(a[index])
+                sub_r.append(r[index])
+                sub_adv.append(adv[index])
+
+            selected_index = np.random.choice(len(negative_index), size)
+            for i in selected_index:
+                index = negative_index[i]
+                sub_s.append(s[index])
+                sub_a.append(a[index])
+                sub_r.append(r[index])
+                sub_adv.append(adv[index])
+        else:
+            selected_index = np.random.choice(len(r), MIN_BATCH_SIZE)
+            for i in selected_index:
+                index = i
+                sub_s.append(s[index])
+                sub_a.append(a[index])
+                sub_r.append(r[index])
+                sub_adv.append(adv[index])
+        return sub_s, sub_a, sub_r, sub_adv
+
+    def balance_minibatch(self, s, a, r, adv, sub_s, sub_a, sub_r, sub_adv, possitive_index, negative_index):
+        sum_adv_init = sub_adv.sum()
+        count = 0
+        while sum_adv_init * sub_adv.sum() >= 0:
+            if sum_adv_init < 0:
+                if len(possitive_index) == 0:
+                    return sub_s, sub_a, sub_r, sub_adv
+                randint = np.random.randint(len(possitive_index))
+                index = possitive_index[randint]
+            else:
+                if len(negative_index) == 0:
+                    return sub_s, sub_a, sub_r, sub_adv
+                randint = np.random.randint(len(negative_index))
+                index = negative_index[randint]
+
+            sub_s.append(s[index])
+            sub_a = np.append(sub_a, a[index])
+            sub_r = np.append(sub_r, r[index])
+            sub_adv = np.append(sub_adv, adv[index])
+
+        # print(sum_adv_init, sub_adv.sum())
+        return sub_s, sub_a, sub_r, sub_adv
+
+
     def update(self):
         global GLOBAL_UPDATE_COUNTER, G_ITERATION
         while not COORD.should_stop():
@@ -269,10 +352,18 @@ class PPO(object):
                 r = r.flatten()
                 adv = adv.flatten()
 
-            # if adv.std() != 0:                
+            # if adv.std() != 0:         
+            adv_ori = adv*1       
             # adv = (adv - adv.mean())/adv.std()
+            # adv = np.clip(adv, -5, 5)
             #     # adv = ((adv - adv.min())/(adv.max() - adv.min()) - 0.5)*2
             #     print('adv min max', adv.mean(), adv.min(), adv.max())
+
+            # for index in range(len(adv)):
+            #     if adv[index] > -0.5 and adv[index] < 0.5:
+            #         adv[index] = 0
+
+            possitive_index, negative_index = self.seperate_adv(adv)
 
             mean_return = np.mean(r)
             print(G_ITERATION, '  --------------- update! batch size:', GLOBAL_EP, '-----------------', len(r))
@@ -292,12 +383,15 @@ class PPO(object):
                     if  end > len(r) - 1 and count == 0:
                         end = len(r)-1
                     count += 1
+
                     sub_s = s_[start:end]
                     sub_a = a_[start:end]
                     sub_r = r_[start:end]
                     sub_adv = np.asarray(adv_[start:end])
-                    # sub_adv = (sub_adv - sub_adv.mean())/sub_adv.std()
 
+                    # sub_s, sub_a, sub_r, sub_adv = self.balance_minibatch(s, a, r, adv, sub_s, sub_a, sub_r, sub_adv, possitive_index, negative_index)
+                    # sub_s, sub_a, sub_r, sub_adv = self.get_minibatch(s, a, r, adv, possitive_index, negative_index)
+                    # print(sub_adv)
                     feed_dict = {
                         self.tfs: sub_s, 
                         self.tfa: sub_a, 
@@ -305,8 +399,8 @@ class PPO(object):
                         self.tfadv: sub_adv, 
                         self.tf_is_train: True
                     }
-                    # self.sess.run(self.train_op, feed_dict = feed_dict)
-                    self.sess.run([self.atrain_op, self.ctrain_op], feed_dict = feed_dict)
+                    self.sess.run(self.train_op, feed_dict = feed_dict)
+                    # self.sess.run([self.atrain_op, self.ctrain_op], feed_dict = feed_dict)
 
                 tloss, aloss, vloss, entropy = self.check_overall_loss(s, a, r, adv)
                 print("aloss: %7.4f|, vloss: %7.4f| entropy: %7.4f" % (aloss, vloss, entropy))
@@ -324,7 +418,7 @@ class PPO(object):
 
             ratio, surr, surr2, a_prob, vpred_new = self.sess.run([self.ratio, self.surr, self.surr2, self.pi_prob, self.v], feed_dict = feed_dict)
             ratio = ratio.flatten()
-            for i in range(25): #range(len(r)):
+            for i in range(len(r)): #range(25):
                 act = int(a[i])
                 output = []
                 output.append(reward[i][0])
@@ -340,8 +434,12 @@ class PPO(object):
                 output.append(0)
                 for prob in a_prob[i]:
                     output.append(prob)
-                print(output)
+                # print(output)
+
+                ratio_prob = a_prob[i][act] / olda_prob[i][act]
                 # print("%8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %6.0i, %8.4f, %8.4f"%(reward[i], r[i], vpred[i], vpred_new[i], adv[i], ratio[i], a[i], olda_prob[i][act],a_prob[i][act]))
+                print("%8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %6.0i, %8.4f"%(reward[i], r[i], vpred[i], vpred_new[i], adv[i], ratio[i], a[i], a_prob[i][act]), a_prob[i])
+
             # ratio_clip = np.clip(ratio, 1-EPSILON, 1+EPSILON)
             # surr_ = ratio*adv.flatten()
             # surr2_ = ratio_clip*adv.flatten()
@@ -408,6 +506,46 @@ class Worker(object):
 
         return buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, s_
 
+    def filter_crash(self, buffer_s, buffer_a, buffer_r, buffer_vpred, buffer_info):
+        s, a, r, vpred, info = [], [], [], [], []
+        for i in range(len(buffer_r)):
+            if buffer_info[i] != 'crash':
+                s.append(buffer_s[i])
+                a.append(buffer_a[i])
+                r.append(buffer_r[i])
+                vpred.append(buffer_vpred[i])
+                info.append(buffer_info[i])
+
+        vpred.append(buffer_vpred[-1])
+        return s, a, r, vpred, info
+
+    def compute_adv_return(self, buffer_reward, buffer_vpred, buffer_info):
+        lastgaelam = 0.0
+        buffer_return = np.zeros(len(buffer_reward))
+        buffer_adv = np.zeros(len(buffer_reward))
+
+        # print(len(buffer_reward))
+
+        for index in reversed(range(len(buffer_reward))):
+            if buffer_info[index] == 'crash' or buffer_info[index] == 'goal':
+            # if buffer_info[index] == 'goal':
+                nonterminal = 0
+            else:
+                nonterminal = 1
+            delta = buffer_reward[index] + GAMMA * buffer_vpred[index+1] * nonterminal - buffer_vpred[index]
+
+            # nonterminal = 1
+            # delta = buffer_reward[index] + GAMMA * buffer_vpred[index+1] - buffer_vpred[index]
+
+            lastgaelam = delta + GAMMA * LAM * nonterminal * lastgaelam
+            buffer_adv[index] = lastgaelam
+            # print (index, len(buffer_r), nonterminal, delta, lastgaelam, buffer_adv[index])
+        buffer_return = buffer_adv + buffer_vpred[:-1]
+        # print(buffer_reward)
+        # print(buffer_return)
+
+        return buffer_adv, buffer_return
+
     def work(self):
         global GLOBAL_EP, GLOBAL_RUNNING_R, GLOBAL_UPDATE_COUNTER \
             , Goal_states, Goal_count, Goal_return, Goal_buffer_full \
@@ -415,82 +553,86 @@ class Worker(object):
             , History_states, History_count, History_adv, History_return, History_buffer_full
 
         self.env.save_ep()
-        s = self.env.reset( 0, 1, 0)
+        # for _ in range(5):
+        #     s = self.env.reset( 0, 0, 0)
+        #     self.env.save_ep()
 
         while not COORD.should_stop():
-            buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, buffer_return, buffer_adv, buffer_done = [], [], [], [], [], [], [], []
+            buffer_s, buffer_a, buffer_r, buffer_vpred, buffer_info = [], [], [], [], []
             info = 'unfinish'
 
             s = self.env.reset(0, 1, 0)
             t = 0
-            
-            # test_actions = [3, 3, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 4, 4]
-            test_actions = [3, 3, 5, 5, 5, 5, 5, 4, 4, 3, 3, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 4, 4]
-            for a in test_actions:
-            # while(1):
+
+            has_crash = False
+
+            test_actions = [3, 3, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 4, 4]
+            # test_actions = [3, 3, 5, 5, 5, 5, 5, 4, 4, 3, 3, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 4, 4]
+            ep_length = len(test_actions) #EP_LEN #len(test_actions)
+            # for a in test_actions:
+            while(1):
                 if not ROLLING_EVENT.is_set():                  # while global PPO is updating
                     ROLLING_EVENT.wait()                        # wait until PPO is updated
-                    buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, buffer_return, buffer_adv = [], [], [], [], [], [], []
-                    break
+                    buffer_s, buffer_a, buffer_r, buffer_vpred, buffer_info = [], [], [], [], []
+                    # break
                 
-                self.ppo.get_action_prob(s)
-                # a = self.ppo.choose_action(s)
+                # if self.wid == 0:
+                #     self.ppo.get_action_prob(s)
+                a = self.ppo.choose_action(s)
                 s_, r, event_r, done, info = self.env.step(a)
                 vpred = self.ppo.get_v(s)
 
-                # if self.wid == 0:
-                #     vpred_ = self.ppo.get_v(s_)
-                #     td = event_r + GAMMA*vpred_ - vpred
-                #     print("a: %i | event_r: %7.4f| vpred: %7.4f| TD: %7.4f| " %(a, event_r, vpred, td))
+                if self.wid == 0:
+                    vpred_ = self.ppo.get_v(s_)
+                    td = event_r + GAMMA*vpred_ - vpred
+                    print("a: %i | event_r: %7.4f| vpred: %7.4f| TD: %7.4f| " %(a, r, vpred, td))
 
                 buffer_s.append(s*1)
                 buffer_a.append(a)
                 buffer_r.append(r)                    # normalize reward, find to be useful
-                buffer_er.append(event_r)
                 buffer_vpred.append(vpred)
-                buffer_done.append(done)
+                buffer_info.append(info)
                 s_demo = s_*1
                 GLOBAL_UPDATE_COUNTER += 1               # count to minimum batch size, no need to wait other workers
 
                 s = s_
                 t += 1
 
-                if done or GLOBAL_UPDATE_COUNTER >= BATCH_SIZE or t == len(test_actions)-1:
-                    if done:
-                        vpred_ = 0
-                    else:
-                        vpred_ = self.ppo.get_v(s_)
+                if info == 'crash':
+                    has_crash = True
 
-                    buffer_done.append(0)
+                if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE or t == ep_length-1 or info == 'goal' or info == 'out':
+
+                    vpred_ = self.ppo.get_v(s_)
                     buffer_vpred.append(vpred_)
-                    buffer_return = np.zeros(len(buffer_r))
-                    buffer_adv = np.zeros(len(buffer_r))
 
-                    lastgaelam = 0.0
-                    if np.count_nonzero(buffer_er) == 0 or True:
-                        reward = buffer_r
-                    else:
-                        reward = buffer_er
+                    buffer_r_backup = buffer_r*1
+                    for index in range(len(buffer_r)):
+                        if buffer_info[index] != 'goal':
+                            buffer_r[index] = 0
 
-                    # vpred_temp = buffer_vpred*1
-                    # buffer_vpred = np.zeros_like(buffer_vpred)
-                    for index in reversed(range(len(buffer_r))):
-                        nonterminal = 1
-                        delta = reward[index] + GAMMA * buffer_vpred[index+1] * nonterminal - buffer_vpred[index]
-                        lastgaelam = delta + GAMMA * LAM * nonterminal * lastgaelam
-                        buffer_adv[index] = lastgaelam
-                        # print (index, len(buffer_r), nonterminal, delta, lastgaelam, buffer_adv[index])
-                    buffer_return = buffer_adv + buffer_vpred[:-1]
+                    buffer_adv, buffer_return = self.compute_adv_return(buffer_r, buffer_vpred, buffer_info)
 
-                    # for i in range(len(buffer_r)):
-                    #     print(buffer_a[i], 'ret', buffer_return[i], 'pred', buffer_vpred[i], 'adv', buffer_adv[i], buffer_r[i])
-                    # print(DEMO_MODE, info)
+                    for index in range(len(buffer_r_backup)):
+                        if buffer_info[index] != 'goal':
+                            buffer_adv[index] += buffer_r_backup[index]
+                            buffer_return[index] += buffer_r_backup[index]
 
-                    bs, ba, bret, brew, badv = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return)[:, np.newaxis], np.array(reward)[:, np.newaxis], np.array(buffer_adv)[:, np.newaxis]
+                    # print(buffer_r_backup)
+                    # print(buffer_return)
 
-                    buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, buffer_return, buffer_adv, buffer_done = [], [], [], [], [], [], [], []
-                
+                    bs, ba, bret, brew, badv = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return)[:, np.newaxis], np.array(buffer_r_backup)[:, np.newaxis], np.array(buffer_adv)[:, np.newaxis]                
                     QUEUE.put(np.hstack((bs, ba, bret, brew, badv)))          # put data in the queue
+
+                    # if has_crash:
+                    #     buffer_s, buffer_a, buffer_r, buffer_vpred, buffer_info = self.filter_crash(buffer_s, buffer_a, buffer_r, buffer_vpred, buffer_info)
+                    #     if len(buffer_r) > 1:
+                    #         buffer_adv, buffer_return = self.compute_adv_return(buffer_r, buffer_vpred, buffer_info)
+                    #         bs, ba, bret, brew, badv = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return)[:, np.newaxis], np.array(buffer_r)[:, np.newaxis], np.array(buffer_adv)[:, np.newaxis]                
+                    #         QUEUE.put(np.hstack((bs, ba, bret, brew, badv)))          # put data in the queue
+                    #         GLOBAL_UPDATE_COUNTER += len(buffer_r)
+
+                    buffer_s, buffer_a, buffer_r, buffer_vpred, buffer_info = [], [], [], [], []
                     if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE:
                         ROLLING_EVENT.clear()       # stop collecting data
                         UPDATE_EVENT.set()          # globalPPO update
@@ -499,7 +641,7 @@ class Worker(object):
                         COORD.request_stop()
                         break
 
-                    if info == 'goal' or info == 'out' or t == len(test_actions)-1:
+                    if done or t == ep_length-1:
                         break 
 
             GLOBAL_EP += 1
