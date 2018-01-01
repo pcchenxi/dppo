@@ -19,7 +19,7 @@ _init_target_dist = 1
 _target_dist = _init_target_dist
 
 _new_ep_prob = 0
-_modifly_prob = 0
+_modifly_prob = 0.8
 
 function start()
     -- sleep (3)
@@ -58,7 +58,7 @@ function start()
 
     _failed_ep_index = 1
     _failed_ep_history = {}
-    _max_history_length = 1000
+    _max_history_length = 6
     _min_history_length = 0 --_max_history_length/4
     _sampl_node = 'new'
     _save_ep = false
@@ -142,6 +142,20 @@ function step(inInts,inFloats,inStrings,inBuffer)
     res = do_action_rl(_robot_hd, inFloats)
     _current_ep = convert_current_ep()
     _current_tra[#_current_tra+1] = _current_ep
+
+    -- if res ~= 't' then 
+    --     if #_current_tra > 4 then 
+    --         _failed_ep_history[_failed_ep_index] = _current_tra[#_current_tra-3]
+    --     else 
+    --         _failed_ep_history[_failed_ep_index] = _current_tra[1]
+    --     end 
+    --     _failed_ep_index = _failed_ep_index + 1
+    --     _failed_ep_index = _failed_ep_index % _max_history_length
+    --     if _failed_ep_index == 1 then 
+    --         _failed_ep_index = 2
+    --     end
+    --     print('save!')
+    -- end
     return {}, {}, {}, res
 end
 
@@ -213,7 +227,7 @@ function get_obstacle_info(inInts,inFloats,inStrings,inBuffer)
 
         obs_info[#obs_info+1] = dim[1]
         obs_info[#obs_info+1] = dim[2]
-        obs_info[#obs_info+1] = pos[3] --dim[3]
+        obs_info[#obs_info+1] = dim[3]
 
         -- print('shape: ', dim[1], dim[2], dim[3], dim[4])
     end
@@ -241,7 +255,7 @@ function get_robot_state(inInts,inFloats,inStrings,inBuffer)
     state[1] = target_dist
     state[2] = dist_to_center
     state[3] = target_pos[1]
-    state[4] = target_pos[1]  --(target_dist/(_target_dist*2)-0.5) * 2
+    state[4] = target_pos[2]  --(target_dist/(_target_dist*2)-0.5) * 2
     -- state[3] = target_ori[3]
     -- state[4] = target_pos[3] - 0.4
     -- state[5] = _pre_target_l
@@ -262,8 +276,8 @@ function get_robot_state(inInts,inFloats,inStrings,inBuffer)
         state[#state+1] = obs_pos_g[3]
     end
     -- state[#state+1] = ori[3]
-    state[#state+1] = pos[3]
-    state[#state+1] = leg_l - _start_l
+    state[#state+1] = pos[3] + 0.2
+    state[#state+1] = leg_l + 0.07
 
     local threshold = 0.3
     local res, data = simCheckDistance(_collection_robot_hd, _collection_hd, threshold)

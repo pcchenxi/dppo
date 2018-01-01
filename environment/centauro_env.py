@@ -15,32 +15,30 @@ print ('import env vrep')
 action_list = []
 for x in range(-1, 2):
     for y in range(-1, 2):
-        # for w in range(-1, 2):
-        #     for h in range(-1, 2):
-        #         for l in range(-1, 2):
-        w = 0
-        h = 0
-        l = 0        
-        action = []
-        action.append(x)
-        action.append(y)
-        action.append(w)
-        action.append(h)
-        action.append(l)
+        for w in range(-1, 2):
+            for h in range(-1, 2):
+                for l in range(-1, 2):
+        # w = 0
+        # h = 0
+        # l = 0        
+                    action = []
+                    action.append(x)
+                    action.append(y)
+                    action.append(w)
+                    action.append(h)
+                    action.append(l)
 
-        if np.count_nonzero(action) == 0:
-            continue 
+                    if np.count_nonzero(action) == 0:
+                        continue 
 
-        action_list.append(action)
-        # print action_list
-
-print(action_list)
+                    action_list.append(action)
+                    # print action_list
 
 observation_range = 1.5
 
 map_size = 2
 map_shift = map_size/2
-grid_size = 0.1
+grid_size = 0.05
 map_pixel = int(map_size/grid_size)
 
 observation_pixel = int(observation_range/grid_size)
@@ -54,8 +52,8 @@ action_space = len(action_list)
 action_type = spaces.Discrete(action_space)
 
 REWARD_GOAL = 50
-REWARD_STEP =  -0.01
-REWARD_CRASH = -1 #REWARD_STEP*10
+REWARD_STEP =  -1
+REWARD_CRASH = -10
 
 class Simu_env():
     def __init__(self, port_num):
@@ -67,12 +65,12 @@ class Simu_env():
         self.min_obsdist_pre = 0.2
         self.obs_dist_pre = 0
         self.state_pre = []
-        self.ep_init = False
-        self.collide_num = 0
         self.ep_step = 0
         self.total_ep_reward = REWARD_GOAL
         self.goal_reached = False
+        self.goal_path = False
         self.goal_counter = 0
+        self.return_end = -1
 
         self.ep_count = 0
 
@@ -109,8 +107,6 @@ class Simu_env():
         # state = np.append(state, 0) 
         # state = np.append(state, 0)
         # state = np.append(state, [0,0,0,0,0])
-        state = state.flatten()
-        # print(state[-6:])
         return state
 
         # state = robot_state
@@ -139,20 +135,19 @@ class Simu_env():
         self.dist_pre = 1000
         self.min_obsdist_pre = 0.2
         self.obs_dist_pre = 0
-        self.collide_num = 0
         self.ep_step = 0
         self.state_pre = []
         # target_dist = 0.15+0.4*self.ep_count/3000
         target_dist = 1
+        self.goal_path = False
+
         if target_dist > 1:
             target_dist = 1
         res, retInts, retFloats, retStrings, retBuffer = self.call_sim_function('centauro', 'reset', [target_dist, env_mode, reset_mode, save_ep])        
         # state, reward, min_dist, obs_count, is_finish, info = self.step([0, 0, 0, 0, 0])
-        state, reward, event_reward,is_finish, info = self.step([0, 0, 0, 0, 0])
+        state, reward_short, reward_long, is_finish, info = self.step([0, 0, 0, 0, 0])
 
         # print('after reset', self.dist_pre)
-        self.ep_init = False        
-        self.collide_num = 0
         self.total_ep_reward = REWARD_GOAL
 
         self.ep_count += 1
@@ -185,18 +180,18 @@ class Simu_env():
         # print((robot_state))
 
         # obs_grid = self.get_observation_gridmap(robot_state[0], robot_state[1])
-        self.get_terrain_map()
+        self.get_terrain_map(robot_state[2], robot_state[3], robot_state[-3], robot_state[-2])
         # plt.clf()
-        # plt.imshow(self.terrain_map, cmap='gray')
+        # plt.imshow(self.terrain_map)
         # plt.pause(0.01)
 
         #compute reward and is_finish
-        reward, event_reward, obs_count, is_finish, info = self.compute_reward(robot_state, action, found_pose)
+        reward_short, reward_long, obs_count, is_finish, info = self.compute_reward(robot_state, action, found_pose)
 
         state_ = self.convert_state(robot_state)
 
         # return state_, reward, min_dist, obs_count, is_finish, info
-        return state_, reward, event_reward, is_finish, info
+        return state_, reward_short, reward_long, is_finish, info
 
     def compute_reward(self, robot_state, action, found_pose):
         # 0,  1,  2,      3,  4,  5              -5,    -4, -3, -2, -1 
@@ -205,9 +200,13 @@ class Simu_env():
         info = 'unfinish'
         save_ep = False
         is_finish = False
+        self.return_end = -1
         action = state = np.asarray(action)
-        reward = 0 #REWARD_CRASH/(self.max_length*2)
-        event_reward = 0
+        reward_short = -REWARD_CRASH/2 #REWARD_CRASH/(self.max_length*2)
+        reward_long = 0
+
+        if action[0] == 0 and action[1] == 0:
+            reward_short = 0
 
         robot_l = robot_state[-2]
         robot_h = robot_state[-3]
@@ -223,15 +222,13 @@ class Simu_env():
 
         dist = robot_state[0]
         target_reward = -(dist - self.dist_pre)/0.1
-        # target_reward = target_reward/(self.max_length*4)
-        # if target_reward < 0:
-        #     target_reward = 0
-
-        # target_reward = 1 - target_reward
-
-        # action_reward = -0.0005 * np.square(action[-2:]).sum()
-
-        # target_reward = -(dist - self.dist_pre) * 5
+        if target_reward <= 0:
+            target_reward = 0
+        
+        # reward_short += target_reward
+        # if target_reward <= 0:
+        #     target_reward = -REWARD_GOAL/4
+        #     reward_short = target_reward
 
         self.dist_pre = dist
         self.min_obsdist_pre = min_dist
@@ -247,20 +244,20 @@ class Simu_env():
             obs_y = robot_state[i+1]
             obs_z = robot_state[i+2] * 2
             obs_h = robot_state[i+3]
-            if obs_y > 0 and obs_y < target_y and abs(obs_x) < 0.3:
+            if obs_y > 0 and obs_y < target_y and abs(obs_x) < 0.4:
                 obs_count += 3*obs_h*(1-abs(obs_x)/0.5)
         # print(obs_count)
 
         if found_pose == bytearray(b"a"):       # when collision or no pose can be found
             # is_finish = True
-            event_reward = REWARD_CRASH
+            reward_short = REWARD_CRASH
             # print('crash a')
             # reward = reward*10       
             info = 'crash'
 
         if found_pose == bytearray(b"c"):       # when collision or no pose can be found
             # is_finish = True
-            event_reward = REWARD_CRASH
+            reward_short = REWARD_CRASH
             # print('crash')
             # reward = reward * 10
             info = 'crash'
@@ -268,52 +265,64 @@ class Simu_env():
         # if np.count_nonzero(action) == 0:
             # event_reward = REWARD_CRASH
 
+        if obs_count == 0:
+            if self.goal_path == False:
+                reward_long = REWARD_GOAL/2
+                self.goal_path = True
+                info = 'on_goal_path'
+        else:
+            if self.goal_path == True:
+                reward_long = -REWARD_GOAL/2
+                self.goal_path = False
+                info = 'off_goal_path'
+            # print('goal')
+
         if dist < 0.1 and info != 'crash': # and diff_l < 0.02:
-            # is_finish = True
-            event_reward = REWARD_GOAL #self.total_ep_reward
+        # if obs_count == 0 or dist < 0.1:
+            is_finish = True
+            reward_long = REWARD_GOAL
+            # reward = 1/(dist+1)*REWARD_GOAL
             info = 'goal'
             # print('goal')
 
         if dist > 1.2: # out of boundary
             is_finish = True
-            # event_reward = -REWARD_GOAL
+            reward_short = REWARD_CRASH
             info = 'out'
             # print('outof bound', robot_state[1])
 
-        # if is_finish:
-        #     self.ep_step = 0
-
-        # reward = REWARD_STEP + REWARD_STEP*np.square(action).sum()
-        # reward = reward * (1 + diff_l + diff_h)
-        # reward = reward * target_reward
-
-        # t = 50
-        # # is_finish = False        
-        # reward = -dist/200
-        # if dist < 0.1 and (not self.goal_reached):
+        # if info == 'goal':
         #     self.goal_counter += 1
-        #     if self.goal_counter > t:
-        #         event_reward = REWARD_GOAL
-        #         self.goal_reached = True
-        #         info = 'goal'
-        #         is_finish = True
-        # elif dist > 0.1:
+        #     if self.goal_counter == 10:
+        #         is_finish = True 
+        # else:
         #     self.goal_counter = 0
-        #     self.goal_reached = False
 
-        if info == 'goal':
-            self.goal_counter += 1
-            if self.goal_counter == 10:
-                is_finish = True 
-        else:
-            self.goal_counter = 0
+        # if target_reward < 0:
+        #     target_reward = -1/(dist+1)*REWARD_GOAL
+        # else:
+        #     target_reward = 1/(dist+1)*REWARD_GOAL
 
-        if obs_count != 0:
-            target_reward = 0
-            
-        reward = event_reward + target_reward * 2
+        # if obs_count != 0:
+        #     target_reward = 0
+        #     self.return_end = -1
+        # else:
+        #     self.return_end = 0.5/(dist*dist+1)*REWARD_GOAL
+        #     if info != 'crash' and info != 'goal':
+        #         info = 'on_goal'
+        #     if self.goal_path == False:
+        #         self.goal_path = True 
+        #         reward_long = 0.5/(dist*dist+1)*REWARD_GOAL
+        #         # print('on goal path')
+                
+        # reward_short += target_reward
+
+        # reward = event_reward + REWARD_STEP + target_reward
         # print(reward, min_dist)
-        return reward, event_reward, obs_count, is_finish, info
+        if obs_count == 0:
+            reward_long += target_reward
+        reward_long += REWARD_STEP
+        return reward_short, reward_long, obs_count, is_finish, info
 
     ####################################  interface funcytion  ###################################
     def save_ep(self):
@@ -389,8 +398,12 @@ class Simu_env():
 
         return self.obs_grid 
 
-    def get_terrain_map(self):
-        self.terrain_map = np.zeros((map_pixel, map_pixel), np.float32)
+    def get_terrain_map(self, t_x, t_y, r_h, r_l):
+        self.terrain_map = np.zeros((map_pixel, map_pixel, 3), np.float32)
+        terrain_map_r = np.zeros((map_pixel, map_pixel), np.float32)
+        terrain_map_o = np.zeros((map_pixel, map_pixel), np.float32)
+        terrain_map_t = np.zeros((map_pixel, map_pixel), np.float32)
+
         _, _, obstacle_info, _, _ = self.call_sim_function('centauro', 'get_obstacle_info')
         for i in range(0, len(obstacle_info), 5):
             x = obstacle_info[i+0] + map_shift
@@ -403,11 +416,28 @@ class Simu_env():
             r = obstacle_info[i+2]
             h = obstacle_info[i+4]
 
-            row = self.terrain_map.shape[0] - int(y/grid_size)
-            col = int(x/grid_size)
+            col = map_pixel - int(y/grid_size)
+            row = map_pixel - int(x/grid_size)
             radius = int(r/grid_size )
-            height = h #(h-0.15)/(0.5-0.15)*255  #255.0/0.5 * h 
-            cv2.circle(self.terrain_map, (col,row), radius, height, -1)
+            height = (h)/(0.5)  #255.0/0.5 * h 
+            cv2.circle(terrain_map_o, (col,row), radius, height, -1)
+
+        x = t_x + map_shift
+        y = t_y + map_shift 
+        col = map_pixel - int(y/grid_size)
+        row = map_pixel - int(x/grid_size)
+        radius = int(0.3/grid_size)
+        cv2.circle(terrain_map_t, (col,row), radius, 1, -1)
+
+        w = int(r_l/grid_size)
+        b = int(0.3/grid_size)
+        h = r_h/0.4
+        cv2.circle(terrain_map_r, (int(map_shift/grid_size), int(map_shift/grid_size)), w, h, -1)
+        self.terrain_map[:,:,0] = terrain_map_o
+        self.terrain_map[:,:,1] = terrain_map_t
+        self.terrain_map[:,:,2] = terrain_map_r
+
+        self.terrain_map = terrain_map_o
         # print(self.terrain_map)
         # print('max', self.terrain_map.max())
         # ## for boundaries
