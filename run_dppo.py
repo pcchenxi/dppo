@@ -99,7 +99,7 @@ class PPO(object):
         self.pi_prob = tf.nn.softmax(pi.logits)
         self.oldpi_prob = tf.nn.softmax(oldpi.logits)
 
-        # self.load_model()   
+        self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')
