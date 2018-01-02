@@ -12,19 +12,19 @@ import time
 import matplotlib.pyplot as plt
 
 EP_MAX = 500000
-EP_LEN = 100
+EP_LEN = 200
 N_WORKER = 4               # parallel workers
 GAMMA = 0.99                # reward discount factor
 LAM = 0.99
 A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0005               # learning rate for critic
-LR = 0.0001
+LR = 0.001
 
 EP_BATCH_SIZE = 5
 BATCH_SIZE = 5120
-MIN_BATCH_SIZE = 256       # minimum batch size for updating PPO
+MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
 
-UPDATE_STEP = 10            # loop update operation n-steps
+UPDATE_STEP = 3            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
 GAME = 'Pendulum-v0'
 S_DIM, A_DIM = centauro_env.observation_space, centauro_env.action_space 
@@ -99,7 +99,7 @@ class PPO(object):
         self.pi_prob = tf.nn.softmax(pi.logits)
         self.oldpi_prob = tf.nn.softmax(oldpi.logits)
 
-        self.load_model()   
+        # self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')
@@ -151,12 +151,12 @@ class PPO(object):
             ob_state = tf.slice(input_state, [0, num_img], [-1, state_size], name = 'slice_ob') 
 
             reshaped_grid = tf.reshape(ob_grid,shape=[-1, img_size, img_size, 1]) 
-            conv1 = tf.layers.conv2d(inputs=reshaped_grid, filters=32, kernel_size=[4, 4], strides = 2, name='conv1', kernel_initializer=w_init, padding="valid", activation=tf.nn.relu, trainable=trainable )
+            conv1 = tf.layers.conv2d(inputs=reshaped_grid, filters=32, kernel_size=[8, 8], strides = 4, name='conv1', kernel_initializer=w_init, padding="valid", activation=tf.nn.relu, trainable=trainable )
             # pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[2, 2], strides=2)
             # x = tf.layers.batch_normalization(x, momentum=0.7, training=self.tf_is_train)    # when have BN
             # x = tf.nn.tanh(x)
 
-            conv2 = tf.layers.conv2d(inputs=conv1, filters=64, kernel_size=[3, 3], strides = 1, name = 'conv2', padding="valid", kernel_initializer=w_init, activation=tf.nn.relu, trainable=trainable )
+            conv2 = tf.layers.conv2d(inputs=conv1, filters=64, kernel_size=[4, 4], strides = 2, name = 'conv2', padding="valid", kernel_initializer=w_init, activation=tf.nn.relu, trainable=trainable )
             # pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[2, 2], strides=2)
             # x = tf.layers.batch_normalization(x, momentum=0.7, training=self.tf_is_train)    # when have BN
             # x = tf.nn.tanh(x)
@@ -166,7 +166,9 @@ class PPO(object):
             # x = tf.layers.conv2d(inputs=x, filters=64, kernel_size=[3, 3], padding="same", activation=tf.nn.relu, trainable=trainable )
 
             flat = tf.contrib.layers.flatten(conv1)
-            feature = tf.concat([flat , ob_state], 1, name = 'concat')
+
+            ob_fc = tf.layers.dense(ob_state, 32, tf.nn.relu, kernel_initializer=w_init, name = 'fc_state', trainable=trainable)
+            feature = tf.concat([flat , ob_fc], 1, name = 'concat')
             # x = tf.layers.dense(inputs=x, units=512, activation=tf.nn.relu)
 
         return feature
@@ -178,7 +180,7 @@ class PPO(object):
         with tf.variable_scope(name):
             self.feature = self._build_feature_net('feature', input_state, trainable=trainable)
             with tf.variable_scope('actor'):
-                l1 = tf.layers.dense(self.feature, 512, tf.nn.relu, kernel_initializer=w_init, name = 'fc_1', trainable=trainable)
+                l1 = tf.layers.dense(self.feature, 1024, tf.nn.relu, kernel_initializer=w_init, name = 'fc_1', trainable=trainable)
                 # l2 = tf.layers.dense(l1, 1024, tf.nn.relu, kernel_initializer=w_init, trainable=trainable)
                 # l1 = self.add_layer(self.feature, 256, 'l1_fc', tf.nn.tanh, trainable=trainable)
                 # l1 = self.add_layer(l1, 128, 'l1_fc2', tf.nn.tanh, trainable=trainable)
@@ -416,7 +418,7 @@ class PPO(object):
             ratio = ratio.flatten()
             for i in range(len(rs)): #range(25):
                 act = int(a[i])
-                print("%8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %6.0i, %8.4f, %8.4f"%(rs[i], rl[i], vs[i], vl[i], adv_s[i], adv_l[i], adv[i], ratio[i], a[i], olda_prob[i][act],a_prob[i][act]))
+                print("%8.4f, %8.4f|, %8.4f, %8.4f|, %8.4f, %8.4f, %8.4f|, %8.4f|, %6.0i|, %8.4f, %8.4f"%(rs[i], rl[i], vs[i], vl[i], adv_s[i], adv_l[i], adv[i], ratio[i], a[i], olda_prob[i][act],a_prob[i][act]))
                 
                 # print("%8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %6.0i, %8.4f"%(reward[i], r[i], vpred[i], vpred_new[i], adv[i], ratio[i], a[i], a_prob[i][act]), a_prob[i])
 
@@ -510,7 +512,7 @@ class Worker(object):
         if mode == 'long':
             gamma = GAMMA
         else:
-            gamma = GAMMA*0.6
+            gamma = GAMMA*0.7
             
         for index in reversed(range(len(buffer_reward))):
             # if buffer_info[index] == 'crash' or buffer_info[index] == 'goal':
@@ -556,7 +558,7 @@ class Worker(object):
         buffer_adv_l, buffer_return_l = self.compute_adv_return(buffer_rl, buffer_vpred_l, buffer_info, 'long')
 
         for i in range(len(buffer_adv_s)):
-            if buffer_adv_s[i] > 0 and buffer_adv_s[i] < 0.5:
+            if buffer_adv_s[i] > -0.5 and buffer_adv_s[i] < 0.5:
                 buffer_adv_s[i] = 0
 
         buffer_adv = buffer_adv_s + buffer_adv_l

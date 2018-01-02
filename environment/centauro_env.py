@@ -38,7 +38,7 @@ observation_range = 1.5
 
 map_size = 2
 map_shift = map_size/2
-grid_size = 0.05
+grid_size = 0.02
 map_pixel = int(map_size/grid_size)
 
 observation_pixel = int(observation_range/grid_size)
@@ -51,9 +51,9 @@ action_space = len(action_list)
 # action_type = spaces.Box(-1, 1, shape = (action_space,))
 action_type = spaces.Discrete(action_space)
 
-REWARD_GOAL = 50
-REWARD_STEP =  -1
-REWARD_CRASH = -10
+REWARD_GOAL = 3
+REWARD_STEP =  -0.01
+REWARD_CRASH = -1
 
 class Simu_env():
     def __init__(self, port_num):
@@ -138,7 +138,7 @@ class Simu_env():
         self.ep_step = 0
         self.state_pre = []
         # target_dist = 0.15+0.4*self.ep_count/3000
-        target_dist = 1
+        target_dist = 0.5
         self.goal_path = False
 
         if target_dist > 1:
@@ -202,11 +202,18 @@ class Simu_env():
         is_finish = False
         self.return_end = -1
         action = state = np.asarray(action)
-        reward_short = -REWARD_CRASH/2 #REWARD_CRASH/(self.max_length*2)
+        reward_short = -REWARD_CRASH #REWARD_CRASH/(self.max_length*2)
         reward_long = 0
 
+        weight_sum = 1
         if action[0] == 0 and action[1] == 0:
             reward_short = 0
+        # else:
+        #     weight = [1, 2, 2, 3, 3]
+        #     weight_sum = weight * np.abs(action)
+        #     weight_sum = np.sum(weight_sum)
+
+            # print(action, weight_sum)
 
         robot_l = robot_state[-2]
         robot_h = robot_state[-3]
@@ -221,7 +228,7 @@ class Simu_env():
         obs_reward = min_dist/0.3
 
         dist = robot_state[0]
-        target_reward = -(dist - self.dist_pre)/0.1
+        target_reward = -(dist - self.dist_pre)/0.05
         if target_reward <= 0:
             target_reward = 0
         
@@ -265,17 +272,17 @@ class Simu_env():
         # if np.count_nonzero(action) == 0:
             # event_reward = REWARD_CRASH
 
-        if obs_count == 0:
-            if self.goal_path == False:
-                reward_long = REWARD_GOAL/2
-                self.goal_path = True
-                info = 'on_goal_path'
-        else:
-            if self.goal_path == True:
-                reward_long = -REWARD_GOAL/2
-                self.goal_path = False
-                info = 'off_goal_path'
-            # print('goal')
+        # if obs_count == 0:
+        #     if self.goal_path == False:
+        #         reward_long = REWARD_GOAL/2
+        #         self.goal_path = True
+        #         info = 'on_goal_path'
+        # else:
+        #     if self.goal_path == True:
+        #         reward_long = -REWARD_GOAL/2
+        #         self.goal_path = False
+        #         info = 'off_goal_path'
+        #     # print('goal')
 
         if dist < 0.1 and info != 'crash': # and diff_l < 0.02:
         # if obs_count == 0 or dist < 0.1:
@@ -319,8 +326,11 @@ class Simu_env():
 
         # reward = event_reward + REWARD_STEP + target_reward
         # print(reward, min_dist)
-        if obs_count == 0:
-            reward_long += target_reward
+        # if obs_count == 0:
+        #     reward_long += target_reward
+        # if info != 'crash':
+        #     reward_short = reward_short/np.sum(weight_sum)
+
         reward_long += REWARD_STEP
         return reward_short, reward_long, obs_count, is_finish, info
 

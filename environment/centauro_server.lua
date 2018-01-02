@@ -15,7 +15,7 @@ _obs_mode = 'random' --'near'
 _bound_x = 1.5
 _bound_y = 1.5
 
-_init_target_dist = 1
+_init_target_dist = 0.2
 _target_dist = _init_target_dist
 
 _new_ep_prob = 0

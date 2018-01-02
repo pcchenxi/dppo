@@ -27,13 +27,13 @@ class VecNormalize(object):
         where 'news' is a boolean vector indicating whether each element is new.
         """
         obs, rews_s, rews_l, news, infos = self.venv.step(vac)
-        self.ret_s = self.ret_s * self.gamma*0.6 + rews_s
+        self.ret_s = self.ret_s * self.gamma*0.7 + rews_s
         self.ret_l = self.ret_l * self.gamma + rews_l
         obs = self._obfilt(obs)
-        if self.ret_s_rms: 
-            self.ret_s_rms.update((self.ret_s + self.ret_l)/2)
-            rews_s = np.clip(rews_s / np.sqrt(self.ret_s_rms.var + self.epsilon), -self.cliprew, self.cliprew)
-            rews_l = np.clip(rews_l / np.sqrt(self.ret_s_rms.var + self.epsilon), -self.cliprew, self.cliprew)
+        # if self.ret_s_rms: 
+        #     self.ret_s_rms.update((self.ret_s + self.ret_l)/2)
+        #     rews_s = np.clip(rews_s / np.sqrt(self.ret_s_rms.var + self.epsilon), -self.cliprew, self.cliprew)
+        #     rews_l = np.clip(rews_l / np.sqrt(self.ret_s_rms.var + self.epsilon), -self.cliprew, self.cliprew)
         # if self.ret_l_rms: 
         #     self.ret_l_rms.update(self.ret_l)
         #     rews_l = np.clip(rews_l / np.sqrt(self.ret_l_rms.var + self.epsilon), -self.cliprew, self.cliprew)
