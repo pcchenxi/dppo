@@ -138,7 +138,7 @@ class Simu_env():
         self.ep_step = 0
         self.state_pre = []
         # target_dist = 0.15+0.4*self.ep_count/3000
-        target_dist = 0.5
+        target_dist = 1
         self.goal_path = False
 
         if target_dist > 1:
@@ -229,13 +229,12 @@ class Simu_env():
 
         dist = robot_state[0]
         target_reward = -(dist - self.dist_pre)/0.05
-        if target_reward <= 0:
-            target_reward = 0
-        
-        # reward_short += target_reward
         # if target_reward <= 0:
-        #     target_reward = -REWARD_GOAL/4
-        #     reward_short = target_reward
+        #     target_reward = 0
+        
+        if target_reward <= 0:
+            target_reward = REWARD_CRASH
+        reward_short += target_reward
 
         self.dist_pre = dist
         self.min_obsdist_pre = min_dist
@@ -260,7 +259,7 @@ class Simu_env():
             reward_short = REWARD_CRASH
             # print('crash a')
             # reward = reward*10       
-            info = 'crash'
+            info = 'crash_a'
 
         if found_pose == bytearray(b"c"):       # when collision or no pose can be found
             # is_finish = True
@@ -286,7 +285,7 @@ class Simu_env():
 
         if dist < 0.1 and info != 'crash': # and diff_l < 0.02:
         # if obs_count == 0 or dist < 0.1:
-            is_finish = True
+            # is_finish = True
             reward_long = REWARD_GOAL
             # reward = 1/(dist+1)*REWARD_GOAL
             info = 'goal'
@@ -298,12 +297,12 @@ class Simu_env():
             info = 'out'
             # print('outof bound', robot_state[1])
 
-        # if info == 'goal':
-        #     self.goal_counter += 1
-        #     if self.goal_counter == 10:
-        #         is_finish = True 
-        # else:
-        #     self.goal_counter = 0
+        if info == 'goal':
+            self.goal_counter += 1
+            if self.goal_counter == 10:
+                is_finish = True 
+        else:
+            self.goal_counter = 0
 
         # if target_reward < 0:
         #     target_reward = -1/(dist+1)*REWARD_GOAL

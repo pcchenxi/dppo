@@ -18,8 +18,8 @@ _bound_y = 1.5
 _init_target_dist = 0.2
 _target_dist = _init_target_dist
 
-_new_ep_prob = 0
-_modifly_prob = 0.8
+_new_ep_prob = 0.2
+_modifly_prob = 0
 
 function start()
     -- sleep (3)
@@ -36,7 +36,7 @@ function start()
     _start_joint_values = get_joint_values(_joint_hds)
 
     _start_t_pos = simGetObjectPosition(_target_hd, -1)
-    _start_t_pos[3] = _start_t_pos[3] + 0.35
+    _start_t_pos[3] = _start_t_pos[3] --+ 0.35
     _start_t_ori = simGetObjectOrientation(_target_hd,-1)
     _start_l = get_current_l(_robot_hd)
 
@@ -58,7 +58,7 @@ function start()
 
     _failed_ep_index = 1
     _failed_ep_history = {}
-    _max_history_length = 6
+    _max_history_length = 500
     _min_history_length = 0 --_max_history_length/4
     _sampl_node = 'new'
     _save_ep = false
@@ -194,13 +194,14 @@ function save_start_end_ep(inInts,inFloats,inStrings,inBuffer)
 end
 
 function save_ep(inInts,inFloats,inStrings,inBuffer)
-    local current_ep = convert_current_ep()
-    _failed_ep_history[_failed_ep_index] = current_ep
-    _failed_ep_index = _failed_ep_index + 1
-    _failed_ep_index = _failed_ep_index % _max_history_length
-    -- print('failed ep:', _failed_ep_index, #_failed_ep_history)
-    print ('    save end ep')
-
+    if _save_ep and _g_save_ep == 1 then 
+        local current_ep = convert_current_ep()
+        _failed_ep_history[_failed_ep_index] = current_ep
+        _failed_ep_index = _failed_ep_index + 1
+        _failed_ep_index = _failed_ep_index % _max_history_length
+        -- print('failed ep:', _failed_ep_index, #_failed_ep_history)
+        print ('    save end ep')
+    end
     return {}, {}, {}, ''
 end
 

@@ -18,13 +18,14 @@ GAMMA = 0.99                # reward discount factor
 LAM = 0.99
 A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0005               # learning rate for critic
-LR = 0.001
+LR = 0.00005
 
 EP_BATCH_SIZE = 5
+UPDATE_L_STEP = 30
 BATCH_SIZE = 5120
 MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
 
-UPDATE_STEP = 3            # loop update operation n-steps
+UPDATE_STEP = 1            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
 GAME = 'Pendulum-v0'
 S_DIM, A_DIM = centauro_env.observation_space, centauro_env.action_space 
@@ -318,6 +319,9 @@ class PPO(object):
 
     def update(self):
         global GLOBAL_UPDATE_COUNTER, G_ITERATION, GLOBAL_EP
+        update_count = 1
+        s_all, a_all, rs_all, rl_all, adv_s_all, adv_l_all = [], [], [], [], [], []
+
         while not COORD.should_stop():
             UPDATE_EVENT.wait()                     # wait until get batch of data
 
@@ -335,29 +339,34 @@ class PPO(object):
                 adv_s = adv_s.flatten()
                 adv_l = adv_l.flatten()
 
+            # if a_all == []:
+            #     s_all, a_all, rs_all, rl_all, adv_s_all, adv_l_all = s, a, rs, rl, adv_s, adv_l
+            # else:
+            #     s_all = np.concatenate((s_all, s), axis = 0)
+            #     a_all = np.concatenate((a_all, a), axis = 0)
+            #     rs_all = np.concatenate((rs_all, rs), axis = 0)
+            #     rl_all = np.concatenate((rl_all, rl), axis = 0)
+            #     adv_s_all = np.concatenate((adv_s_all, adv_s), axis = 0)
+            #     adv_l_all = np.concatenate((adv_l_all, adv_l), axis = 0)
+            # print('all size', len(a_all))
+
+            # if update_count % UPDATE_L_STEP == 0:
+            #     print('update long adv', update_count, UPDATE_L_STEP)
+            #     s, a, rs, rl, adv_s, adv_l = s_all, a_all, rs_all, rl_all, adv_s_all, adv_l_all 
+            #     adv = adv_l_all 
+            #     update_iter = UPDATE_STEP*8
+            #     print(len(a), len(a))
+            # else:
+            #     print('update short adv', update_count, UPDATE_L_STEP)
+            #     adv = adv_s
+            #     update_iter = UPDATE_STEP
+
             # adv_s = (adv_s - adv_s.mean())/adv_s.std()
             # adv_l = (adv_l - adv_l.mean())/adv_l.std()
 
             adv = adv_s + adv_l
-            adv = (adv - adv.mean())/adv.std()
-            # for i in range(len(adv)):
-            #     if adv[i] < -0.5:
-            #         adv[i] = -1
-            #     elif adv[i] > 0.5:
-            #         adv[i] = 1
-            #     else:
-            #         adv[i] = 0
-            # if adv.std() != 0:         
-            adv_ori = adv*1       
-            
-            # adv = np.clip(adv, -5, 5)
-            #     # adv = ((adv - adv.min())/(adv.max() - adv.min()) - 0.5)*2
-            #     print('adv min max', adv.mean(), adv.min(), adv.max())
-
-            # for index in range(len(adv)):
-            #     if adv[index] > -0.5 and adv[index] < 0.5:
-            #         adv[index] = 0
-
+            if adv.std() != 0:
+                adv = (adv - adv.mean())/adv.std()
             # possitive_index, negative_index = self.seperate_adv(adv)
 
             print(G_ITERATION, '  --------------- update! batch size:', GLOBAL_EP, '-----------------', len(rs))
@@ -430,9 +439,9 @@ class PPO(object):
 
             # print((surr))
             # print(surr_)
-            tloss, aloss, vloss, entropy = self.sess.run([self.total_loss, self.aloss, self.closs, self.entropy], feed_dict = feed_dict)
+            # tloss, aloss, vloss, entropy = self.sess.run([self.total_loss, self.aloss, self.closs, self.entropy], feed_dict = feed_dict)
             print('-------------------------------------------------------------------------------')
-            print("aloss: %7.4f|, vloss: %7.4f| entropy: %7.4f" % (aloss, vloss, np.mean(entropy)))
+            print("aloss: %7.4f|, vloss: %7.4f| entropy: %7.4f" % (aloss, vloss, entropy))
 
             # self.write_summary('Loss/entropy', np.mean(entropy))  
             # self.write_summary('Loss/a loss', aloss) 
@@ -447,6 +456,13 @@ class PPO(object):
             G_ITERATION += 1
             GLOBAL_EP = 0
             ROLLING_EVENT.set()         # set roll-out available
+            
+            update_count += 1
+            if update_count % UPDATE_L_STEP == 1:
+                update_count = 1
+                s_all, a_all, rs_all, rl_all, adv_s_all, adv_l_all = [], [], [], [], [], []
+                print('reset')
+
 
 class Worker(object):
     def __init__(self, wid):
@@ -557,9 +573,9 @@ class Worker(object):
         buffer_adv_s, buffer_return_s = self.compute_adv_return(buffer_rs, buffer_vpred_s, buffer_info, 'short')
         buffer_adv_l, buffer_return_l = self.compute_adv_return(buffer_rl, buffer_vpred_l, buffer_info, 'long')
 
-        for i in range(len(buffer_adv_s)):
-            if buffer_adv_s[i] > -0.5 and buffer_adv_s[i] < 0.5:
-                buffer_adv_s[i] = 0
+        # for i in range(len(buffer_adv_s)):
+        #     if buffer_adv_s[i] > -0.5 and buffer_adv_s[i] < 0.5:
+        #         buffer_adv_s[i] = 0
 
         buffer_adv = buffer_adv_s + buffer_adv_l
 
@@ -581,7 +597,7 @@ class Worker(object):
 
         # self.env.save_ep()
         # for _ in range(3):
-        #     s = self.env.reset( 0, 0, 0)
+        #     s = self.env.reset( 0, 0, 1)
         #     self.env.save_ep()
 
         update_counter = 0
@@ -591,7 +607,7 @@ class Worker(object):
             buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
             info = 'unfinish'
 
-            s = self.env.reset(0, 1, 0)
+            s = self.env.reset(0, 1, 1)
             t = 0
 
             has_crash = False
@@ -602,6 +618,7 @@ class Worker(object):
             # for a in test_actions:
             GLOBAL_EP += 1
             ep_count += 1
+            saved_ep = False
             # if ep_count == 5:
             #     ep_count = 0
             #     self.env.clear_history()
@@ -641,9 +658,9 @@ class Worker(object):
                 # plt.imshow(img)
                 # plt.pause(0.01)
 
-                if self.wid == 0:
-                    prob = self.ppo.get_action_prob(s)
-                    print("a: %6i | rs: %7.4f| rl: %7.4f| rs: %7.4f| rl: %7.4f| prob: %7.4f" %(a, r_short, r_long, vpred_s, vpred_l, prob[a]), info)
+                # if self.wid == 0:
+                #     prob = self.ppo.get_action_prob(s)
+                #     print("a: %6i | rs: %7.4f| rl: %7.4f| rs: %7.4f| rl: %7.4f| prob: %7.4f" %(a, r_short, r_long, vpred_s, vpred_l, prob[a]), info)
 
                 buffer_s.append(s*1)
                 buffer_a.append(a)
@@ -658,10 +675,10 @@ class Worker(object):
                 s = s_
                 t += 1
 
-                if info == 'crash':
+                if info == 'crash' and saved_ep == False:
                     has_crash = True
-                    # self.env.save_ep()
-
+                    self.env.save_ep()
+                    saved_ep = True
 
                 # if self.wid == 0:
                 #     if t == ep_length-1 or done:
@@ -693,9 +710,9 @@ class Worker(object):
                             g_end[index] = self.env.return_end
                             g_index += 1 
 
-                    # if len(g_a) > 0 and np.random.rand() > 0.7:
-                    #     index = np.random.randint(len(g_a))
-                    #     self.process_and_send(g_s[index], g_a[index], g_rs[index], g_rl[index], g_info[index], g_s_[index], g_end[index])
+                    if len(g_a) > 0 and np.random.rand() > 0.7:
+                        index = np.random.randint(len(g_a))
+                        self.process_and_send(g_s[index], g_a[index], g_rs[index], g_rl[index], g_info[index], g_s_[index], g_end[index])
 
                     self.process_and_send(buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_info, s_, self.env.return_end)
 
