@@ -143,19 +143,19 @@ function step(inInts,inFloats,inStrings,inBuffer)
     _current_ep = convert_current_ep()
     _current_tra[#_current_tra+1] = _current_ep
 
-    -- if res ~= 't' then 
-    --     if #_current_tra > 4 then 
-    --         _failed_ep_history[_failed_ep_index] = _current_tra[#_current_tra-3]
-    --     else 
-    --         _failed_ep_history[_failed_ep_index] = _current_tra[1]
-    --     end 
-    --     _failed_ep_index = _failed_ep_index + 1
-    --     _failed_ep_index = _failed_ep_index % _max_history_length
-    --     if _failed_ep_index == 1 then 
-    --         _failed_ep_index = 2
-    --     end
-    --     print('save!')
-    -- end
+    if res ~= 't' and _save_ep and _g_save_ep == 1 then 
+        if #_current_tra > 4 then 
+            _failed_ep_history[_failed_ep_index] = _current_tra[#_current_tra-3]
+        else 
+            _failed_ep_history[_failed_ep_index] = _current_tra[1]
+        end 
+        _failed_ep_index = _failed_ep_index + 1
+        _failed_ep_index = _failed_ep_index % _max_history_length
+        if _failed_ep_index == 1 then 
+            _failed_ep_index = 2
+        end
+        print('save!')
+    end
     return {}, {}, {}, res
 end
 

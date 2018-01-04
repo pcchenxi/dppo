@@ -13,16 +13,16 @@ import matplotlib.pyplot as plt
 
 EP_MAX = 500000
 EP_LEN = 200
-N_WORKER = 4               # parallel workers
+N_WORKER = 1               # parallel workers
 GAMMA = 0.99                # reward discount factor
 LAM = 0.99
 A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0005               # learning rate for critic
-LR = 0.00005
+LR = 0.00001
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 5120
+BATCH_SIZE = 64
 MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
 
 UPDATE_STEP = 1            # loop update operation n-steps
@@ -339,16 +339,35 @@ class PPO(object):
                 adv_s = adv_s.flatten()
                 adv_l = adv_l.flatten()
 
-            # if a_all == []:
-            #     s_all, a_all, rs_all, rl_all, adv_s_all, adv_l_all = s, a, rs, rl, adv_s, adv_l
-            # else:
-            #     s_all = np.concatenate((s_all, s), axis = 0)
-            #     a_all = np.concatenate((a_all, a), axis = 0)
-            #     rs_all = np.concatenate((rs_all, rs), axis = 0)
-            #     rl_all = np.concatenate((rl_all, rl), axis = 0)
-            #     adv_s_all = np.concatenate((adv_s_all, adv_s), axis = 0)
-            #     adv_l_all = np.concatenate((adv_l_all, adv_l), axis = 0)
-            # print('all size', len(a_all))
+            if len(a_all) >= BATCH_SIZE*2:
+                selected_index = np.random.choice(len(a_all), BATCH_SIZE, replace=False)
+                for i in selected_index:
+                    s = np.append([s_all[i]], s, axis = 0)
+                    a = np.append([a_all[i]], a, axis = 0)
+                    rs = np.append([rs_all[i]], rs, axis = 0)
+                    rl = np.append([rl_all[i]], rl, axis = 0)
+                    adv_s = np.append([adv_s_all[i]], adv_s, axis = 0)
+                    adv_l = np.append([adv_l_all[i]], adv_l, axis = 0)
+
+            if a_all == []:
+                s_all, a_all, rs_all, rl_all, adv_s_all, adv_l_all = s, a, rs, rl, adv_s, adv_l
+            else:
+                s_all = np.concatenate((s_all, s), axis = 0)
+                a_all = np.concatenate((a_all, a), axis = 0)
+                rs_all = np.concatenate((rs_all, rs), axis = 0)
+                rl_all = np.concatenate((rl_all, rl), axis = 0)
+                adv_s_all = np.concatenate((adv_s_all, adv_s), axis = 0)
+                adv_l_all = np.concatenate((adv_l_all, adv_l), axis = 0)
+
+            if len(a_all > 1000):
+                s_all = s_all[-1000:]
+                a_all = a_all[-1000:]
+                rs_all = rs_all[-1000:]
+                rl_all = rl_all[-1000:]
+                adv_s_all = adv_s_all[-1000:]
+                adv_l_all = adv_l_all[-1000:]
+
+            print('all size', len(a_all))
 
             # if update_count % UPDATE_L_STEP == 0:
             #     print('update long adv', update_count, UPDATE_L_STEP)
@@ -677,7 +696,7 @@ class Worker(object):
 
                 if info == 'crash' and saved_ep == False:
                     has_crash = True
-                    self.env.save_ep()
+                    # self.env.save_ep()
                     saved_ep = True
 
                 # if self.wid == 0:
@@ -710,9 +729,9 @@ class Worker(object):
                             g_end[index] = self.env.return_end
                             g_index += 1 
 
-                    if len(g_a) > 0 and np.random.rand() > 0.7:
-                        index = np.random.randint(len(g_a))
-                        self.process_and_send(g_s[index], g_a[index], g_rs[index], g_rl[index], g_info[index], g_s_[index], g_end[index])
+                    # if len(g_a) > 0 and np.random.rand() > 0.7:
+                    #     index = np.random.randint(len(g_a))
+                    #     self.process_and_send(g_s[index], g_a[index], g_rs[index], g_rl[index], g_info[index], g_s_[index], g_end[index])
 
                     self.process_and_send(buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_info, s_, self.env.return_end)
 

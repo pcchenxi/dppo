@@ -262,7 +262,7 @@ class Simu_env():
             info = 'crash_a'
 
         if found_pose == bytearray(b"c"):       # when collision or no pose can be found
-            # is_finish = True
+            is_finish = True
             reward_short = REWARD_CRASH
             # print('crash')
             # reward = reward * 10
