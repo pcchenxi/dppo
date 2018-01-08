@@ -18,8 +18,8 @@ _bound_y = 1.5
 _init_target_dist = 0.2
 _target_dist = _init_target_dist
 
-_new_ep_prob = 0.1
-_modifly_prob = 0
+_new_ep_prob = 0
+_modifly_prob = 0.99
 
 function start()
     -- sleep (3)
@@ -61,8 +61,8 @@ function start()
     _max_history_length = 6
     _min_history_length = 0 --_max_history_length/4
     _sampl_node = 'new'
-    _save_ep = false
-    _g_save_ep = 0
+    _save_ep = true
+    _g_save_ep = 1
 
     _pre_robot_pos = _start_pos
     _pre_robot_ori = _start_ori

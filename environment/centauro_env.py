@@ -234,7 +234,6 @@ class Simu_env():
         
         if target_reward <= 0:
             target_reward = REWARD_CRASH
-        reward_short += target_reward
 
         self.dist_pre = dist
         self.min_obsdist_pre = min_dist
@@ -264,7 +263,7 @@ class Simu_env():
         if found_pose == bytearray(b"c"):       # when collision or no pose can be found
             # is_finish = True
             reward_short = REWARD_CRASH
-            reward_long += REWARD_CRASH
+            reward_long += REWARD_STEP*10
             # print('crash')
             # reward = reward * 10
             info = 'crash'
@@ -331,6 +330,8 @@ class Simu_env():
         # if info != 'crash':
         #     reward_short = reward_short/np.sum(weight_sum)
 
+        if obs_count == 0:
+            reward_short += target_reward
         reward_long += REWARD_STEP
         return reward_short, reward_long, obs_count, is_finish, info
 

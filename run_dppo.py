@@ -13,17 +13,17 @@ import matplotlib.pyplot as plt
 
 EP_MAX = 500000
 EP_LEN = 80
-N_WORKER = 1               # parallel workers
+N_WORKER = 4               # parallel workers
 GAMMA = 0.99                # reward discount factor
 LAM = 0.99
 A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0005               # learning rate for critic
-LR = 0.00001
+LR = 0.0001
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 128
-MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
+BATCH_SIZE = 5120
+MIN_BATCH_SIZE = 256       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
@@ -626,7 +626,7 @@ class Worker(object):
         g_index = 0
         g_max = 20
 
-        # self.env.save_ep()
+        self.env.save_ep()
         # for _ in range(3):
         #     s = self.env.reset( 0, 0, 1)
         #     self.env.save_ep()
@@ -709,7 +709,7 @@ class Worker(object):
                 if info == 'crash' and saved_ep == False:
                     has_crash = True
                     # self.env.save_ep()
-                    self.env.save_start_end_ep()
+                    # self.env.save_start_end_ep()
                     saved_ep = True
 
                 # if self.wid == 0:
@@ -760,7 +760,7 @@ class Worker(object):
 
                     if done or t == ep_length-1:
                         if done and info != 'goal' and saved_ep == False:
-                            self.env.save_start_end_ep()
+                            # self.env.save_start_end_ep()
                             saved_ep = True
                         break 
 
