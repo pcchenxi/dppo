@@ -18,7 +18,7 @@ _bound_y = 1.5
 _init_target_dist = 0.2
 _target_dist = _init_target_dist
 
-_new_ep_prob = 0.2
+_new_ep_prob = 0.1
 _modifly_prob = 0
 
 function start()
@@ -58,7 +58,7 @@ function start()
 
     _failed_ep_index = 1
     _failed_ep_history = {}
-    _max_history_length = 500
+    _max_history_length = 6
     _min_history_length = 0 --_max_history_length/4
     _sampl_node = 'new'
     _save_ep = false
@@ -142,20 +142,6 @@ function step(inInts,inFloats,inStrings,inBuffer)
     res = do_action_rl(_robot_hd, inFloats)
     _current_ep = convert_current_ep()
     _current_tra[#_current_tra+1] = _current_ep
-
-    if res ~= 't' and _save_ep and _g_save_ep == 1 then 
-        if #_current_tra > 4 then 
-            _failed_ep_history[_failed_ep_index] = _current_tra[#_current_tra-3]
-        else 
-            _failed_ep_history[_failed_ep_index] = _current_tra[1]
-        end 
-        _failed_ep_index = _failed_ep_index + 1
-        _failed_ep_index = _failed_ep_index % _max_history_length
-        if _failed_ep_index == 1 then 
-            _failed_ep_index = 2
-        end
-        print('save!')
-    end
     return {}, {}, {}, res
 end
 
@@ -182,11 +168,11 @@ function save_start_end_ep(inInts,inFloats,inStrings,inBuffer)
         _failed_ep_index = _failed_ep_index + 1
         _failed_ep_index = _failed_ep_index % _max_history_length
 
-        local last_ep = convert_current_ep()
-        _failed_ep_history[_failed_ep_index] = last_ep
-        _failed_ep_index = _failed_ep_index + 1
-        _failed_ep_index = _failed_ep_index % _max_history_length
-        -- -- -- print('failed ep:', _failed_ep_index, #_failed_ep_history)
+        -- local last_ep = convert_current_ep()
+        -- _failed_ep_history[_failed_ep_index] = last_ep
+        -- _failed_ep_index = _failed_ep_index + 1
+        -- _failed_ep_index = _failed_ep_index % _max_history_length
+        -- -- -- -- print('failed ep:', _failed_ep_index, #_failed_ep_history)
         print ('    save start ep', _failed_ep_index, #_failed_ep_history)
     end
 
@@ -201,6 +187,18 @@ function save_ep(inInts,inFloats,inStrings,inBuffer)
         _failed_ep_index = _failed_ep_index % _max_history_length
         -- print('failed ep:', _failed_ep_index, #_failed_ep_history)
         print ('    save end ep')
+
+        -- if #_current_tra > 4 then 
+        --     _failed_ep_history[_failed_ep_index] = _current_tra[#_current_tra-3]
+        -- else 
+        --     _failed_ep_history[_failed_ep_index] = _current_tra[1]
+        -- end 
+        -- _failed_ep_index = _failed_ep_index + 1
+        -- _failed_ep_index = _failed_ep_index % _max_history_length
+        -- if _failed_ep_index == 1 then 
+        --     _failed_ep_index = 2
+        -- end
+        -- print('save!')        
     end
     return {}, {}, {}, ''
 end
@@ -434,8 +432,8 @@ function sample_new_ep()
         local obs_pos = {}
         local obs_index = math.random(#_obs_hds)
         local obs_pos_before =  simGetObjectPosition(_obs_hds[obs_index], -1)
-        obs_pos[1] = (math.random() - 0.5)*2 * 0.4 + (robot_pos[1] + target_pos[1])/2
-        obs_pos[2] = (math.random() - 0.5)*2 * 0.4 + (robot_pos[2] + target_pos[2])/2
+        obs_pos[1] = (math.random() - 0.5)*2 * 0.3 + (robot_pos[1] + target_pos[1])/2
+        obs_pos[2] = (math.random() - 0.5)*2 * 0.3 + (robot_pos[2] + target_pos[2])/2
         obs_pos[3] = obs_pos_before[3]
         simSetObjectPosition(_obs_hds[obs_index], -1, obs_pos)
     end

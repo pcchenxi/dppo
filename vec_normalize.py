@@ -57,6 +57,10 @@ class VecNormalize(object):
 
     def save_ep(self):
         return self.venv.save_ep()
+    
+    def save_start_end_ep(self):
+        return self.venv.save_start_end_ep()
+
     def clear_history_leave_one(self):
         return self.venv.clear_history_leave_one()
     def clear_history(self):

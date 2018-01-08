@@ -12,8 +12,8 @@ import time
 import matplotlib.pyplot as plt
 
 EP_MAX = 500000
-EP_LEN = 200
-N_WORKER = 1               # parallel workers
+EP_LEN = 80
+N_WORKER = 7               # parallel workers
 GAMMA = 0.99                # reward discount factor
 LAM = 0.99
 A_LR = 0.0001               # learning rate for actor
@@ -22,10 +22,10 @@ LR = 0.00001
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 64
-MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
+BATCH_SIZE = 20480
+MIN_BATCH_SIZE = 256       # minimum batch size for updating PPO
 
-UPDATE_STEP = 1            # loop update operation n-steps
+UPDATE_STEP = 5            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
 GAME = 'Pendulum-v0'
 S_DIM, A_DIM = centauro_env.observation_space, centauro_env.action_space 
@@ -339,33 +339,33 @@ class PPO(object):
                 adv_s = adv_s.flatten()
                 adv_l = adv_l.flatten()
 
-            if len(a_all) >= BATCH_SIZE*2:
-                selected_index = np.random.choice(len(a_all), BATCH_SIZE, replace=False)
-                for i in selected_index:
-                    s = np.append([s_all[i]], s, axis = 0)
-                    a = np.append([a_all[i]], a, axis = 0)
-                    rs = np.append([rs_all[i]], rs, axis = 0)
-                    rl = np.append([rl_all[i]], rl, axis = 0)
-                    adv_s = np.append([adv_s_all[i]], adv_s, axis = 0)
-                    adv_l = np.append([adv_l_all[i]], adv_l, axis = 0)
+            # if len(a_all) >= BATCH_SIZE*2:
+            #     selected_index = np.random.choice(len(a_all), BATCH_SIZE, replace=False)
+            #     for i in selected_index:
+            #         s = np.append([s_all[i]], s, axis = 0)
+            #         a = np.append([a_all[i]], a, axis = 0)
+            #         rs = np.append([rs_all[i]], rs, axis = 0)
+            #         rl = np.append([rl_all[i]], rl, axis = 0)
+            #         adv_s = np.append([adv_s_all[i]], adv_s, axis = 0)
+            #         adv_l = np.append([adv_l_all[i]], adv_l, axis = 0)
 
-            if a_all == []:
-                s_all, a_all, rs_all, rl_all, adv_s_all, adv_l_all = s, a, rs, rl, adv_s, adv_l
-            else:
-                s_all = np.concatenate((s_all, s), axis = 0)
-                a_all = np.concatenate((a_all, a), axis = 0)
-                rs_all = np.concatenate((rs_all, rs), axis = 0)
-                rl_all = np.concatenate((rl_all, rl), axis = 0)
-                adv_s_all = np.concatenate((adv_s_all, adv_s), axis = 0)
-                adv_l_all = np.concatenate((adv_l_all, adv_l), axis = 0)
+            # if a_all == []:
+            #     s_all, a_all, rs_all, rl_all, adv_s_all, adv_l_all = s, a, rs, rl, adv_s, adv_l
+            # else:
+            #     s_all = np.concatenate((s_all, s), axis = 0)
+            #     a_all = np.concatenate((a_all, a), axis = 0)
+            #     rs_all = np.concatenate((rs_all, rs), axis = 0)
+            #     rl_all = np.concatenate((rl_all, rl), axis = 0)
+            #     adv_s_all = np.concatenate((adv_s_all, adv_s), axis = 0)
+            #     adv_l_all = np.concatenate((adv_l_all, adv_l), axis = 0)
 
-            if len(a_all > 1000):
-                s_all = s_all[-1000:]
-                a_all = a_all[-1000:]
-                rs_all = rs_all[-1000:]
-                rl_all = rl_all[-1000:]
-                adv_s_all = adv_s_all[-1000:]
-                adv_l_all = adv_l_all[-1000:]
+            # if len(a_all > 1000):
+            #     s_all = s_all[-1000:]
+            #     a_all = a_all[-1000:]
+            #     rs_all = rs_all[-1000:]
+            #     rl_all = rl_all[-1000:]
+            #     adv_s_all = adv_s_all[-1000:]
+            #     adv_l_all = adv_l_all[-1000:]
 
             print('all size', len(a_all))
 
@@ -426,8 +426,9 @@ class PPO(object):
                     self.sess.run(self.train_op, feed_dict = feed_dict)
                     # self.sess.run([self.atrain_op, self.ctrain_op], feed_dict = feed_dict)
 
-                tloss, aloss, vloss, entropy = self.check_overall_loss(s, a, rs, rl, adv)
-                print("aloss: %7.4f|, vloss: %7.4f| entropy: %7.4f" % (aloss, vloss, entropy))
+                # tloss, aloss, vloss, entropy = self.check_overall_loss(s, a, rs, rl, adv)
+                # print("aloss: %7.4f|, vloss: %7.4f| entropy: %7.4f" % (aloss, vloss, entropy))
+                print(iteration)
 
             feed_dict = {
                 self.tfs: s, 
@@ -458,7 +459,7 @@ class PPO(object):
 
             # print((surr))
             # print(surr_)
-            # tloss, aloss, vloss, entropy = self.sess.run([self.total_loss, self.aloss, self.closs, self.entropy], feed_dict = feed_dict)
+            tloss, aloss, vloss, entropy = self.sess.run([self.total_loss, self.aloss, self.closs, self.entropy], feed_dict = feed_dict)
             print('-------------------------------------------------------------------------------')
             print("aloss: %7.4f|, vloss: %7.4f| entropy: %7.4f" % (aloss, vloss, entropy))
 
@@ -697,6 +698,7 @@ class Worker(object):
                 if info == 'crash' and saved_ep == False:
                     has_crash = True
                     # self.env.save_ep()
+                    self.env.save_start_end_ep()
                     saved_ep = True
 
                 # if self.wid == 0:
@@ -746,6 +748,9 @@ class Worker(object):
                         break
 
                     if done or t == ep_length-1:
+                        if done and info != 'goal' and saved_ep == False:
+                            self.env.save_start_end_ep()
+                            saved_ep = True
                         break 
 
 
