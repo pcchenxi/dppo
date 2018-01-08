@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 EP_MAX = 500000
 EP_LEN = 80
-N_WORKER = 7               # parallel workers
+N_WORKER = 1               # parallel workers
 GAMMA = 0.99                # reward discount factor
 LAM = 0.99
 A_LR = 0.0001               # learning rate for actor
@@ -22,8 +22,8 @@ LR = 0.00001
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 20480
-MIN_BATCH_SIZE = 256       # minimum batch size for updating PPO
+BATCH_SIZE = 128
+MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
@@ -332,12 +332,12 @@ class PPO(object):
             if isinstance(Action_Space, gym.spaces.Box):
                 s, a, rs, rl, adv_s, adv_l = data[:, :S_DIM], data[:, S_DIM: S_DIM + A_DIM], data[:, S_DIM + A_DIM: S_DIM + A_DIM+1], data[:, S_DIM + A_DIM+1: S_DIM + A_DIM+2], data[:, S_DIM + A_DIM+2: S_DIM + A_DIM+3], data[:, -1:]
             else:
-                s, a, rs, rl, adv_s, adv_l = data[:, :S_DIM], data[:, S_DIM: S_DIM + 1], data[:, S_DIM + 1: S_DIM + 2], data[:, S_DIM + 2: S_DIM + 3], data[:, S_DIM + 3: S_DIM + 4], data[:, -1:]
-                a = a.flatten()
-                rs = rs.flatten()
-                rl = rl.flatten()
-                adv_s = adv_s.flatten()
-                adv_l = adv_l.flatten()
+                s, a, rs, rl, adv_s, adv_l, info = data[:, :S_DIM], data[:, S_DIM: S_DIM + 1], data[:, S_DIM + 1: S_DIM + 2], data[:, S_DIM + 2: S_DIM + 3], data[:, S_DIM + 3: S_DIM + 4], data[:, S_DIM + 4: S_DIM + 5], data[:, -1:]
+                a = (a.flatten())
+                rs = (rs.flatten())
+                rl = (rl.flatten())
+                adv_s = (adv_s.flatten())
+                adv_l = (adv_l.flatten())
 
             # if len(a_all) >= BATCH_SIZE*2:
             #     selected_index = np.random.choice(len(a_all), BATCH_SIZE, replace=False)
@@ -447,7 +447,7 @@ class PPO(object):
             ratio = ratio.flatten()
             for i in range(len(rs)): #range(25):
                 act = int(a[i])
-                print("%8.4f, %8.4f|, %8.4f, %8.4f|, %8.4f, %8.4f, %8.4f|, %8.4f|, %6.0i|, %8.4f, %8.4f"%(rs[i], rl[i], vs[i], vl[i], adv_s[i], adv_l[i], adv[i], ratio[i], a[i], olda_prob[i][act],a_prob[i][act]))
+                print("%8.4f, %8.4f|, %8.4f, %8.4f|, %8.4f, %8.4f, %8.4f|, %8.4f|, %6.0i|, %8.4f, %8.4f"%(rs[i], rl[i], vs[i], vl[i], adv_s[i], adv_l[i], adv[i], ratio[i], a[i], olda_prob[i][act],a_prob[i][act]), info[i])
                 
                 # print("%8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %6.0i, %8.4f"%(reward[i], r[i], vpred[i], vpred_new[i], adv[i], ratio[i], a[i], a_prob[i][act]), a_prob[i])
 
@@ -599,10 +599,21 @@ class Worker(object):
 
         buffer_adv = buffer_adv_s + buffer_adv_l
 
-        # for i in range(len(buffer_adv)):
-            # print("rs: %7.4f| rl: %7.4f| vs: %7.4f| vl: %7.4f| adv_s: %7.4f| adv_l: %7.4f| r_s: %7.4f| r_l: %7.4f" %(buffer_rs[i], buffer_rl[i], buffer_vpred_s[i], buffer_vpred_l[i], buffer_adv_s[i], buffer_adv_l[i], buffer_return_s[i], buffer_return_l[i]), buffer_info[i])
-        bs, ba, bret_s, bret_l, badv_s, badv_l = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return_s)[:, np.newaxis], np.array(buffer_return_l)[:, np.newaxis], np.array(buffer_adv_s)[:, np.newaxis], np.array(buffer_adv_l)[:, np.newaxis]                 
-        QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l)))          # put data in the queue
+        for i in range(len(buffer_adv)):
+            print("rs: %7.4f| rl: %7.4f| vs: %7.4f| vl: %7.4f| adv_s: %7.4f| adv_l: %7.4f| r_s: %7.4f| r_l: %7.4f" %(buffer_rs[i], buffer_rl[i], buffer_vpred_s[i], buffer_vpred_l[i], buffer_adv_s[i], buffer_adv_l[i], buffer_return_s[i], buffer_return_l[i]), buffer_info[i])
+        
+        info_num = []
+        for info in buffer_info:
+            if info == 'goal':
+                info_num.append(1)
+            elif info == 'crash':
+                info_num.append(-2)
+            elif info == 'crash_a':
+                info_num.append(-1)
+            else:
+                info_num.append(0)
+        bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return_s)[:, np.newaxis], np.array(buffer_return_l)[:, np.newaxis], np.array(buffer_adv_s)[:, np.newaxis], np.array(buffer_adv_l)[:, np.newaxis], np.vstack(info_num)     
+        QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
 
     def work(self):
         global GLOBAL_EP, GLOBAL_RUNNING_R, GLOBAL_UPDATE_COUNTER \
