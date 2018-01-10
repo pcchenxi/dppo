@@ -10,7 +10,8 @@ class VecNormalize(object):
         self.venv = venv
         self._observation_space = self.venv.observation_space
         self._action_space = venv.action_space
-        self.ob_rms = RunningMeanStd(shape=self._observation_space.shape) if ob else None
+        # self.ob_rms = RunningMeanStd(shape=self._observation_space.shape) if ob else None
+        self.ob_rms = RunningMeanStd(shape=4) if ob else None
         self.ret_s_rms = RunningMeanStd(shape=()) if ret else None
         self.ret_l_rms = RunningMeanStd(shape=()) if ret else None
         self.clipob = clipob
@@ -41,10 +42,10 @@ class VecNormalize(object):
         return obs, rews_s, rews_l, news, infos
     def _obfilt(self, obs):
         if self.ob_rms: 
-            self.ob_rms.update(obs)
-            img_ori = obs[:-4]
-            obs = np.clip((obs - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + self.epsilon), -self.clipob, self.clipob)
-            obs[:-4] = img_ori
+            ob_state = obs[-4:]
+            self.ob_rms.update(ob_state)
+            ob_state = np.clip((ob_state - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + self.epsilon), -self.clipob, self.clipob)
+            obs[-4:] = ob_state
             return obs
         else:
             return obs

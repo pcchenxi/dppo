@@ -8,7 +8,7 @@ require("get_set")
 -- action: vx, vy, vw, vl
 
 scale = 0.5
-step = 0.07 * scale
+step = 0.1 * scale
 dx = step * scale
 dy = step * scale
 dh = 0.02 * scale

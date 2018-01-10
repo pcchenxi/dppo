@@ -275,8 +275,8 @@ function get_robot_state(inInts,inFloats,inStrings,inBuffer)
         state[#state+1] = obs_pos_g[3]
     end
     -- state[#state+1] = ori[3]
-    state[#state+1] = pos[3] + 0.2
-    state[#state+1] = leg_l + 0.07
+    state[#state+1] = pos[3]
+    state[#state+1] = leg_l
 
     local threshold = 0.3
     local res, data = simCheckDistance(_collection_robot_hd, _collection_hd, threshold)

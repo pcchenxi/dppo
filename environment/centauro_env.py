@@ -138,7 +138,7 @@ class Simu_env():
         self.ep_step = 0
         self.state_pre = []
         # target_dist = 0.15+0.4*self.ep_count/3000
-        target_dist = 1
+        target_dist = 0.3
         self.goal_path = False
 
         if target_dist > 1:
@@ -205,9 +205,9 @@ class Simu_env():
         reward_short = -REWARD_CRASH #REWARD_CRASH/(self.max_length*2)
         reward_long = 0
 
-        weight_sum = 1
-        if action[0] == 0 and action[1] == 0:
-            reward_short = 0
+        # weight_sum = 1
+        # if action[0] == 0 and action[1] == 0:
+        #     reward_short = 0
         # else:
         #     weight = [1, 2, 2, 3, 3]
         #     weight_sum = weight * np.abs(action)
@@ -225,15 +225,13 @@ class Simu_env():
         off_pose = 1 - max(diff_l, diff_h)/0.15
         if off_pose < 0:
             off_pose = 0
-        obs_reward = min_dist/0.3
+        obs_reward = min_dist/0.2
+        reward_short = reward_short * obs_reward
 
         dist = robot_state[0]
         target_reward = -(dist - self.dist_pre)/0.05
-        # if target_reward <= 0:
-        #     target_reward = 0
-        
         if target_reward <= 0:
-            target_reward = REWARD_CRASH
+            target_reward = 0 #REWARD_CRASH
 
         self.dist_pre = dist
         self.min_obsdist_pre = min_dist
@@ -330,8 +328,9 @@ class Simu_env():
         # if info != 'crash':
         #     reward_short = reward_short/np.sum(weight_sum)
 
-        if obs_count == 0:
+        if obs_count == 0 and info != 'crash' and info != 'crash_a':
             reward_short += target_reward
+
         reward_long += REWARD_STEP
         return reward_short, reward_long, obs_count, is_finish, info
 

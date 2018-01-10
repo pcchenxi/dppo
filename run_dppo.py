@@ -12,18 +12,18 @@ import time
 import matplotlib.pyplot as plt
 
 EP_MAX = 500000
-EP_LEN = 80
-N_WORKER = 4               # parallel workers
+EP_LEN = 50
+N_WORKER = 1               # parallel workers
 GAMMA = 0.99                # reward discount factor
 LAM = 0.99
 A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0005               # learning rate for critic
-LR = 0.0001
+LR = 0.001
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 5120
-MIN_BATCH_SIZE = 256       # minimum batch size for updating PPO
+BATCH_SIZE = 128
+MIN_BATCH_SIZE = 32       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
@@ -162,14 +162,14 @@ class PPO(object):
             # x = tf.layers.batch_normalization(x, momentum=0.7, training=self.tf_is_train)    # when have BN
             # x = tf.nn.tanh(x)
 
-            conv3 = tf.layers.conv2d(inputs=conv2, filters=64, kernel_size=[3, 3], strides = 1, name = 'conv3', padding="valid", kernel_initializer=w_init, activation=tf.nn.relu, trainable=trainable )
+            # conv3 = tf.layers.conv2d(inputs=conv2, filters=64, kernel_size=[3, 3], strides = 1, name = 'conv3', padding="valid", kernel_initializer=w_init, activation=tf.nn.relu, trainable=trainable )
             # pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[2, 2], strides=2)
             # x = tf.layers.conv2d(inputs=x, filters=64, kernel_size=[3, 3], padding="same", activation=tf.nn.relu, trainable=trainable )
 
-            flat = tf.contrib.layers.flatten(conv1)
+            flat = tf.contrib.layers.flatten(conv2)
 
-            ob_fc = tf.layers.dense(ob_state, 32, tf.nn.relu, kernel_initializer=w_init, name = 'fc_state', trainable=trainable)
-            feature = tf.concat([flat , ob_fc], 1, name = 'concat')
+            # ob_fc = tf.layers.dense(ob_state, 32, tf.nn.relu, kernel_initializer=w_init, name = 'fc_state', trainable=trainable)
+            feature = tf.concat([flat , ob_state], 1, name = 'concat')
             # x = tf.layers.dense(inputs=x, units=512, activation=tf.nn.relu)
 
         return feature
@@ -181,7 +181,7 @@ class PPO(object):
         with tf.variable_scope(name):
             self.feature = self._build_feature_net('feature', input_state, trainable=trainable)
             with tf.variable_scope('actor'):
-                l1 = tf.layers.dense(self.feature, 1024, tf.nn.relu, kernel_initializer=w_init, name = 'fc_1', trainable=trainable)
+                l1 = tf.layers.dense(self.feature, 256, tf.nn.relu, kernel_initializer=w_init, name = 'fc_1', trainable=trainable)
                 # l2 = tf.layers.dense(l1, 1024, tf.nn.relu, kernel_initializer=w_init, trainable=trainable)
                 # l1 = self.add_layer(self.feature, 256, 'l1_fc', tf.nn.tanh, trainable=trainable)
                 # l1 = self.add_layer(l1, 128, 'l1_fc2', tf.nn.tanh, trainable=trainable)
@@ -384,8 +384,8 @@ class PPO(object):
             # adv_l = (adv_l - adv_l.mean())/adv_l.std()
 
             adv = adv_s + adv_l
-            if adv.std() != 0:
-                adv = (adv - adv.mean())/adv.std()
+            # if adv.std() != 0:
+            #     adv = (adv - adv.mean())/adv.std()
             # possitive_index, negative_index = self.seperate_adv(adv)
 
             print(G_ITERATION, '  --------------- update! batch size:', GLOBAL_EP, '-----------------', len(rs))
@@ -626,7 +626,7 @@ class Worker(object):
         g_index = 0
         g_max = 20
 
-        self.env.save_ep()
+        # self.env.save_ep()
         # for _ in range(3):
         #     s = self.env.reset( 0, 0, 1)
         #     self.env.save_ep()
@@ -760,7 +760,7 @@ class Worker(object):
 
                     if done or t == ep_length-1:
                         if done and info != 'goal' and saved_ep == False:
-                            # self.env.save_start_end_ep()
+                            self.env.save_start_end_ep()
                             saved_ep = True
                         break 
 
