@@ -51,9 +51,9 @@ action_space = len(action_list)
 # action_type = spaces.Box(-1, 1, shape = (action_space,))
 action_type = spaces.Discrete(action_space)
 
-REWARD_GOAL = 3
-REWARD_STEP =  -0.01
-REWARD_CRASH = -1
+REWARD_GOAL = 100
+REWARD_STEP =  -1
+REWARD_CRASH = -10
 
 class Simu_env():
     def __init__(self, port_num):
@@ -69,6 +69,7 @@ class Simu_env():
         self.total_ep_reward = REWARD_GOAL
         self.goal_reached = False
         self.goal_path = False
+        self.goal_dist = 0
         self.goal_counter = 0
         self.return_end = -1
 
@@ -138,7 +139,7 @@ class Simu_env():
         self.ep_step = 0
         self.state_pre = []
         # target_dist = 0.15+0.4*self.ep_count/3000
-        target_dist = 0.3
+        target_dist = 1
         self.goal_path = False
 
         if target_dist > 1:
@@ -202,7 +203,7 @@ class Simu_env():
         is_finish = False
         self.return_end = -1
         action = state = np.asarray(action)
-        reward_short = -REWARD_CRASH #REWARD_CRASH/(self.max_length*2)
+        reward_short = 0 #REWARD_GOAL/2 #REWARD_CRASH/(self.max_length*2)
         reward_long = 0
 
         # weight_sum = 1
@@ -226,12 +227,12 @@ class Simu_env():
         if off_pose < 0:
             off_pose = 0
         obs_reward = min_dist/0.2
-        reward_short = reward_short * obs_reward
+        # reward_short = reward_short * obs_reward
 
         dist = robot_state[0]
-        target_reward = -(dist - self.dist_pre)/0.05
-        if target_reward <= 0:
-            target_reward = 0 #REWARD_CRASH
+        target_reward = -(dist - self.dist_pre)/0.1 * 10
+        # if target_reward <= 0:
+        #     target_reward = -1 #REWARD_CRASH
 
         self.dist_pre = dist
         self.min_obsdist_pre = min_dist
@@ -247,20 +248,20 @@ class Simu_env():
             obs_y = robot_state[i+1]
             obs_z = robot_state[i+2] * 2
             obs_h = robot_state[i+3]
-            if obs_y > 0 and obs_y < target_y and abs(obs_x) < 0.4:
+            if obs_y > 0 and obs_y < target_y and abs(obs_x) < 0.2:
                 obs_count += 3*obs_h*(1-abs(obs_x)/0.5)
         # print(obs_count)
 
         if found_pose == bytearray(b"a"):       # when collision or no pose can be found
             # is_finish = True
-            reward_short = REWARD_CRASH
+            reward_short = -REWARD_GOAL/2
             # print('crash a')
             # reward = reward*10       
             info = 'crash_a'
 
         if found_pose == bytearray(b"c"):       # when collision or no pose can be found
             # is_finish = True
-            reward_short = REWARD_CRASH
+            reward_short = -REWARD_GOAL/2
             reward_long += REWARD_STEP*10
             # print('crash')
             # reward = reward * 10
@@ -269,17 +270,21 @@ class Simu_env():
         # if np.count_nonzero(action) == 0:
             # event_reward = REWARD_CRASH
 
-        # if obs_count == 0:
-        #     if self.goal_path == False:
-        #         reward_long = REWARD_GOAL/2
-        #         self.goal_path = True
-        #         info = 'on_goal_path'
-        # else:
-        #     if self.goal_path == True:
-        #         reward_long = -REWARD_GOAL/2
-        #         self.goal_path = False
-        #         info = 'off_goal_path'
-        #     # print('goal')
+        if obs_count == 0:
+            if self.goal_path == False:
+                reward_long = 0.5*REWARD_GOAL
+                self.goal_path = True
+                self.goal_dist = dist
+                info = 'on_goal_path'
+                print('on goal')
+        else:
+            if self.goal_path == True:
+                reward_long = -0.5*REWARD_GOAL
+                self.goal_path = False
+                info = 'crash_a'
+                print('off goal')
+                # info = 'off_goal_path'
+            # print('goal')
 
         if dist < 0.1 and info != 'crash': # and diff_l < 0.02:
         # if obs_count == 0 or dist < 0.1:
@@ -291,7 +296,7 @@ class Simu_env():
 
         if dist > 1.2: # out of boundary
             is_finish = True
-            reward_short = REWARD_CRASH
+            reward_long = -REWARD_GOAL
             info = 'out'
             # print('outof bound', robot_state[1])
 
@@ -306,18 +311,6 @@ class Simu_env():
         #     target_reward = -1/(dist+1)*REWARD_GOAL
         # else:
         #     target_reward = 1/(dist+1)*REWARD_GOAL
-
-        # if obs_count != 0:
-        #     target_reward = 0
-        #     self.return_end = -1
-        # else:
-        #     self.return_end = 0.5/(dist*dist+1)*REWARD_GOAL
-        #     if info != 'crash' and info != 'goal':
-        #         info = 'on_goal'
-        #     if self.goal_path == False:
-        #         self.goal_path = True 
-        #         reward_long = 0.5/(dist*dist+1)*REWARD_GOAL
-        #         # print('on goal path')
                 
         # reward_short += target_reward
 
@@ -329,7 +322,7 @@ class Simu_env():
         #     reward_short = reward_short/np.sum(weight_sum)
 
         if obs_count == 0 and info != 'crash' and info != 'crash_a':
-            reward_short += target_reward
+            reward_short = target_reward
 
         reward_long += REWARD_STEP
         return reward_short, reward_long, obs_count, is_finish, info

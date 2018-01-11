@@ -19,7 +19,7 @@ _init_target_dist = 0.2
 _target_dist = _init_target_dist
 
 _new_ep_prob = 0
-_modifly_prob = 0.99
+_modifly_prob = 0
 
 function start()
     -- sleep (3)

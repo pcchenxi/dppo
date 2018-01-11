@@ -12,17 +12,17 @@ import time
 import matplotlib.pyplot as plt
 
 EP_MAX = 500000
-EP_LEN = 50
+EP_LEN = 200
 N_WORKER = 1               # parallel workers
-GAMMA = 0.99                # reward discount factor
-LAM = 0.99
+GAMMA = 1                # reward discount factor
+LAM = 1
 A_LR = 0.0001               # learning rate for actor
-C_LR = 0.0005               # learning rate for critic
+C_LR = 0.0001               # learning rate for critic
 LR = 0.001
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 128
+BATCH_SIZE = 256
 MIN_BATCH_SIZE = 32       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
@@ -67,7 +67,9 @@ class PPO(object):
         self.aloss = -tf.reduce_mean(tf.minimum(self.surr, self.surr2))
 
         self.entropy = tf.reduce_mean(pi.entropy())
-        
+        a_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='net/actor')
+        self.atrain_op = tf.train.AdamOptimizer(A_LR).minimize(self.aloss, var_list = a_params)
+
         # critic
         self.tfdc_rs = tf.placeholder(tf.float32, [None], 'discounted_rs')
         self.tfdc_rl = tf.placeholder(tf.float32, [None], 'discounted_rl')
@@ -78,6 +80,10 @@ class PPO(object):
         # self.closs2 = tf.square(self.tfdc_r - vpredclipped)
 
         self.closs = tf.reduce_mean(self.closs_s)*0.5 + tf.reduce_mean(self.closs_l)*0.5 #tf.reduce_mean(tf.maximum(self.closs1, self.closs2)) #
+        c_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='net/value')
+        print(c_params)
+        self.ctrain_op = tf.train.AdamOptimizer(C_LR).minimize(self.closs, var_list = c_params)
+
 
         self.total_loss = self.aloss*1 + self.closs*0.25 - 0.0*self.entropy
 
@@ -179,9 +185,10 @@ class PPO(object):
         # w_init = tf.zeros_initializer()
         # w_init = tf.random_normal_initializer(0., .1)
         with tf.variable_scope(name):
-            self.feature = self._build_feature_net('feature', input_state, trainable=trainable)
+            # self.feature = self._build_feature_net('feature', input_state, trainable=trainable)
             with tf.variable_scope('actor'):
-                l1 = tf.layers.dense(self.feature, 256, tf.nn.relu, kernel_initializer=w_init, name = 'fc_1', trainable=trainable)
+                self.feature_a = self._build_feature_net('feature_a', input_state, trainable=trainable)            
+                l1 = tf.layers.dense(self.feature_a, 256, tf.nn.relu, kernel_initializer=w_init, name = 'fc_a', trainable=trainable)
                 # l2 = tf.layers.dense(l1, 1024, tf.nn.relu, kernel_initializer=w_init, trainable=trainable)
                 # l1 = self.add_layer(self.feature, 256, 'l1_fc', tf.nn.tanh, trainable=trainable)
                 # l1 = self.add_layer(l1, 128, 'l1_fc2', tf.nn.tanh, trainable=trainable)
@@ -194,11 +201,17 @@ class PPO(object):
                 else:
                     print('discrate action')
                     # out = tf.layers.dense(self.feature_a, A_DIM, kernel_initializer=w_init, trainable=trainable)  
-                    out = tf.layers.dense(l1, A_DIM+2, name='fc_2', kernel_initializer=w_init, trainable=trainable)      
+                    pdparam = tf.layers.dense(l1, A_DIM, name='fc_prob', kernel_initializer=w_init, trainable=trainable)      
 
-                vs = tf.slice(out, [0, A_DIM], [-1, 1], name = 'slice_vs')
-                vl = tf.slice(out, [0, A_DIM+1], [-1, 1], name = 'slice_vl')
-                pdparam = tf.slice(out, [0, 0], [-1, A_DIM], name = 'slice_a')
+                # vs = tf.slice(out, [0, A_DIM], [-1, 1], name = 'slice_vs')
+                # vl = tf.slice(out, [0, A_DIM+1], [-1, 1], name = 'slice_vl')
+                # pdparam = tf.slice(out, [0, 0], [-1, A_DIM], name = 'slice_a')
+
+            with tf.variable_scope('value'):
+                self.feature_v = self._build_feature_net('feature_v', input_state, trainable=trainable)
+                lv = tf.layers.dense(self.feature_v, 256, tf.nn.relu, kernel_initializer=w_init, name = 'fc_v', trainable=trainable)
+                vs = tf.layers.dense(lv, 1, kernel_initializer=w_init, name = 'fc_vs', trainable=trainable)
+                vl = tf.layers.dense(lv, 1, kernel_initializer=w_init, name = 'fc_vl', trainable=trainable)
 
         pdtype = make_pdtype(Action_Space)
         pd = pdtype.pdfromflat(pdparam)
@@ -423,8 +436,8 @@ class PPO(object):
                         self.tfadv: sub_adv, 
                         self.tf_is_train: True
                     }
-                    self.sess.run(self.train_op, feed_dict = feed_dict)
-                    # self.sess.run([self.atrain_op, self.ctrain_op], feed_dict = feed_dict)
+                    # self.sess.run(self.train_op, feed_dict = feed_dict)
+                    self.sess.run([self.atrain_op, self.ctrain_op], feed_dict = feed_dict)
 
                 # tloss, aloss, vloss, entropy = self.check_overall_loss(s, a, rs, rl, adv)
                 # print("aloss: %7.4f|, vloss: %7.4f| entropy: %7.4f" % (aloss, vloss, entropy))
@@ -553,15 +566,15 @@ class Worker(object):
         for index in reversed(range(len(buffer_reward))):
             # if buffer_info[index] == 'crash' or buffer_info[index] == 'goal':
             if mode == 'long':
-                if buffer_info[index] == 'goal':
+                if buffer_info[index] == 'goal' or buffer_info[index] == 'on_goal_path':
                     nonterminal = 0
                 else:
                     nonterminal = 1
             else:
-            #     if buffer_info[index] == 'crash':
-            #         nonterminal = 0
-            #     else:
-                nonterminal = 1                
+                if buffer_info[index] == 'crash':
+                    nonterminal = 0
+                else:
+                    nonterminal = 1                
             delta = buffer_reward[index] + gamma * buffer_vpred[index+1] * nonterminal - buffer_vpred[index]
 
             # nonterminal = 1
@@ -584,24 +597,24 @@ class Worker(object):
         buffer_vpred_l = buffer_vpred_l.flatten()
         
         vpred_s_, vpred_l_ = self.ppo.get_v(s_)
-        if end != -1 and end > vpred_l_:
-            vpred_l_ = end
-        # else:
-        #     vpred_l_ = 0
+
         buffer_vpred_s = np.append(buffer_vpred_s, vpred_s_)
         buffer_vpred_l = np.append(buffer_vpred_l, vpred_l_)
         buffer_adv_s, buffer_return_s = self.compute_adv_return(buffer_rs, buffer_vpred_s, buffer_info, 'short')
         buffer_adv_l, buffer_return_l = self.compute_adv_return(buffer_rl, buffer_vpred_l, buffer_info, 'long')
 
-        # for i in range(len(buffer_adv_s)):
-        #     if buffer_adv_s[i] > -0.5 and buffer_adv_s[i] < 0.5:
-        #         buffer_adv_s[i] = 0
+        buffer_adv_s = buffer_return_s*1
+        for i in range(len(buffer_adv_s)):
+            if buffer_adv_s[i] > -0: # and buffer_adv_s[i] < 0.5:
+                buffer_adv_s[i] = 0
 
         buffer_adv = buffer_adv_s + buffer_adv_l
 
-        for i in range(len(buffer_adv)):
-            print("rs: %7.4f| rl: %7.4f| vs: %7.4f| vl: %7.4f| adv_s: %7.4f| adv_l: %7.4f| r_s: %7.4f| r_l: %7.4f" %(buffer_rs[i], buffer_rl[i], buffer_vpred_s[i], buffer_vpred_l[i], buffer_adv_s[i], buffer_adv_l[i], buffer_return_s[i], buffer_return_l[i]), buffer_info[i])
-        
+        if self.wid == 0:
+            print('----')
+            for i in range(len(buffer_adv)):
+                print("rs: %7.4f| rl: %7.4f| vs: %7.4f| vl: %7.4f| adv_s: %7.4f| adv_l: %7.4f| r_s: %7.4f| r_l: %7.4f" %(buffer_rs[i], buffer_rl[i], buffer_vpred_s[i], buffer_vpred_l[i], buffer_adv_s[i], buffer_adv_l[i], buffer_return_s[i], buffer_return_l[i]), buffer_info[i])
+            
         info_num = []
         for info in buffer_info:
             if info == 'goal':
@@ -626,8 +639,8 @@ class Worker(object):
         g_index = 0
         g_max = 20
 
-        # self.env.save_ep()
-        # for _ in range(3):
+        self.env.save_ep()
+        # for _ in range(1):
         #     s = self.env.reset( 0, 0, 1)
         #     self.env.save_ep()
 
@@ -689,9 +702,9 @@ class Worker(object):
                 # plt.imshow(img)
                 # plt.pause(0.01)
 
-                # if self.wid == 0:
-                #     prob = self.ppo.get_action_prob(s)
-                #     print("a: %6i | rs: %7.4f| rl: %7.4f| rs: %7.4f| rl: %7.4f| prob: %7.4f" %(a, r_short, r_long, vpred_s, vpred_l, prob[a]), info)
+                if self.wid == 0:
+                    prob = self.ppo.get_action_prob(s)
+                    print("a: %6i | rs: %7.4f| rl: %7.4f| rs: %7.4f| rl: %7.4f| prob: %7.4f" %(a, r_short, r_long, vpred_s, vpred_l, prob[a]), info)
 
                 buffer_s.append(s*1)
                 buffer_a.append(a)
@@ -760,7 +773,7 @@ class Worker(object):
 
                     if done or t == ep_length-1:
                         if done and info != 'goal' and saved_ep == False:
-                            self.env.save_start_end_ep()
+                            # self.env.save_start_end_ep()
                             saved_ep = True
                         break 
 
