@@ -52,7 +52,7 @@ action_space = len(action_list)
 action_type = spaces.Discrete(action_space)
 
 REWARD_GOAL = 100
-REWARD_STEP =  -1
+REWARD_STEP =  -0.01
 REWARD_CRASH = -1
 
 class Simu_env():
@@ -92,8 +92,8 @@ class Simu_env():
 
     @property
     def action_space(self):
-        # return spaces.Box(-1, 1, shape = (5,))
-        return spaces.Discrete(len(action_list))
+        return spaces.Box(-1, 1, shape = (5,))
+        # return spaces.Discrete(len(action_list))
 
     def convert_state(self, robot_state):
         state = np.asarray(robot_state)
@@ -280,7 +280,7 @@ class Simu_env():
 
         if dist > 1.2: # out of boundary
             is_finish = True
-            reward_long = -REWARD_GOAL
+            reward_short = REWARD_CRASH
             info = 'out'
             # print('outof bound', robot_state[1])
 
@@ -321,9 +321,9 @@ class Simu_env():
         # if info != 'crash':
         #     reward_short = reward_short/np.sum(weight_sum)
 
-        if obs_count == 0 and info != 'crash' and info != 'crash_a' and target_reward < 0:
-            reward_short = REWARD_CRASH
-            info = 'crash_a'
+        # if obs_count == 0 and info != 'crash' and info != 'crash_a' and target_reward < 0:
+        #     reward_short = REWARD_CRASH
+        #     info = 'crash_a'
 
         reward_long += REWARD_STEP
         return reward_short, reward_long, obs_count, is_finish, info
