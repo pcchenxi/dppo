@@ -18,7 +18,7 @@ _bound_y = 1.5
 _init_target_dist = 0.2
 _target_dist = _init_target_dist
 
-_new_ep_prob = 0
+_new_ep_prob = 0.2
 _modifly_prob = 0
 
 function start()
@@ -58,7 +58,7 @@ function start()
 
     _failed_ep_index = 1
     _failed_ep_history = {}
-    _max_history_length = 6
+    _max_history_length = 50
     _min_history_length = 0 --_max_history_length/4
     _sampl_node = 'new'
     _save_ep = true

@@ -13,16 +13,16 @@ import matplotlib.pyplot as plt
 
 EP_MAX = 500000
 EP_LEN = 200
-N_WORKER = 1               # parallel workers
+N_WORKER = 7               # parallel workers
 GAMMA = 1                # reward discount factor
 LAM = 1
-A_LR = 0.0001               # learning rate for actor
-C_LR = 0.0001               # learning rate for critic
+A_LR = 0.00001               # learning rate for actor
+C_LR = 0.00001               # learning rate for critic
 LR = 0.001
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 256
+BATCH_SIZE = 10240
 MIN_BATCH_SIZE = 32       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
@@ -380,7 +380,6 @@ class PPO(object):
             #     adv_s_all = adv_s_all[-1000:]
             #     adv_l_all = adv_l_all[-1000:]
 
-            print('all size', len(a_all))
 
             # if update_count % UPDATE_L_STEP == 0:
             #     print('update long adv', update_count, UPDATE_L_STEP)
@@ -396,7 +395,22 @@ class PPO(object):
             # adv_s = (adv_s - adv_s.mean())/adv_s.std()
             # adv_l = (adv_l - adv_l.mean())/adv_l.std()
 
+            # if adv_l.max() > 0:
+            #     adv_l = adv_l/adv_l.max()                
             adv = adv_s + adv_l
+            if adv_l.min() < 0:
+                adv_s_scale = adv_s * -adv_l.min()
+            for i in range(len(adv_s)):
+                if adv_s[i] < -0.5 and adv_s_scale[i] < adv_l[i]:
+                    adv[i] = adv_s_scale[i]
+                else:
+                    adv[i] = adv_l[i]
+
+            if abs(adv.max()) > abs(adv.min()):
+                adv = adv/abs(adv.max())
+            else:
+                adv = adv/abs(adv.min())
+
             # if adv.std() != 0:
             #     adv = (adv - adv.mean())/adv.std()
             # possitive_index, negative_index = self.seperate_adv(adv)
@@ -571,7 +585,7 @@ class Worker(object):
                 else:
                     nonterminal = 1
             else:
-                if buffer_info[index] == 'crash':
+                if buffer_info[index] == 'crash' or buffer_info[index] == 'crash_a':
                     nonterminal = 0
                 else:
                     nonterminal = 1                
@@ -604,16 +618,16 @@ class Worker(object):
         buffer_adv_l, buffer_return_l = self.compute_adv_return(buffer_rl, buffer_vpred_l, buffer_info, 'long')
 
         buffer_adv_s = buffer_return_s*1
-        for i in range(len(buffer_adv_s)):
-            if buffer_adv_s[i] > -0: # and buffer_adv_s[i] < 0.5:
-                buffer_adv_s[i] = 0
+        # for i in range(len(buffer_adv_s)):
+        #     if buffer_adv_s[i] > -0: # and buffer_adv_s[i] < 0.5:
+        #         buffer_adv_s[i] = 0
 
         buffer_adv = buffer_adv_s + buffer_adv_l
 
-        if self.wid == 0:
-            print('----')
-            for i in range(len(buffer_adv)):
-                print("rs: %7.4f| rl: %7.4f| vs: %7.4f| vl: %7.4f| adv_s: %7.4f| adv_l: %7.4f| r_s: %7.4f| r_l: %7.4f" %(buffer_rs[i], buffer_rl[i], buffer_vpred_s[i], buffer_vpred_l[i], buffer_adv_s[i], buffer_adv_l[i], buffer_return_s[i], buffer_return_l[i]), buffer_info[i])
+        # if self.wid == 0:
+        #     print('----')
+        #     for i in range(len(buffer_adv)):
+        #         print("rs: %7.4f| rl: %7.4f| vs: %7.4f| vl: %7.4f| adv_s: %7.4f| adv_l: %7.4f| r_s: %7.4f| r_l: %7.4f" %(buffer_rs[i], buffer_rl[i], buffer_vpred_s[i], buffer_vpred_l[i], buffer_adv_s[i], buffer_adv_l[i], buffer_return_s[i], buffer_return_l[i]), buffer_info[i])
             
         info_num = []
         for info in buffer_info:
@@ -639,7 +653,7 @@ class Worker(object):
         g_index = 0
         g_max = 20
 
-        self.env.save_ep()
+        # self.env.save_ep()
         # for _ in range(1):
         #     s = self.env.reset( 0, 0, 1)
         #     self.env.save_ep()
@@ -702,9 +716,9 @@ class Worker(object):
                 # plt.imshow(img)
                 # plt.pause(0.01)
 
-                if self.wid == 0:
-                    prob = self.ppo.get_action_prob(s)
-                    print("a: %6i | rs: %7.4f| rl: %7.4f| rs: %7.4f| rl: %7.4f| prob: %7.4f" %(a, r_short, r_long, vpred_s, vpred_l, prob[a]), info)
+                # if self.wid == 0:
+                #     prob = self.ppo.get_action_prob(s)
+                #     print("a: %6i | rs: %7.4f| rl: %7.4f| rs: %7.4f| rl: %7.4f| prob: %7.4f" %(a, r_short, r_long, vpred_s, vpred_l, prob[a]), info)
 
                 buffer_s.append(s*1)
                 buffer_a.append(a)
@@ -721,8 +735,8 @@ class Worker(object):
 
                 if info == 'crash' and saved_ep == False:
                     has_crash = True
-                    # self.env.save_ep()
-                    # self.env.save_start_end_ep()
+                    self.env.save_ep()
+                    self.env.save_start_end_ep()
                     saved_ep = True
 
                 # if self.wid == 0:
@@ -773,7 +787,7 @@ class Worker(object):
 
                     if done or t == ep_length-1:
                         if done and info != 'goal' and saved_ep == False:
-                            # self.env.save_start_end_ep()
+                            self.env.save_start_end_ep()
                             saved_ep = True
                         break 
 
