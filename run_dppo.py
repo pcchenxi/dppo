@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 EP_MAX = 500000
 EP_LEN = 200
-N_WORKER = 1               # parallel workers
+N_WORKER = 7               # parallel workers
 GAMMA = 1                # reward discount factor
 LAM = 1
 A_LR = 0.0001               # learning rate for actor
@@ -22,8 +22,8 @@ LR = 0.0001
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 256
-MIN_BATCH_SIZE = 32       # minimum batch size for updating PPO
+BATCH_SIZE = 2048
+MIN_BATCH_SIZE = 2048       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
@@ -397,20 +397,14 @@ class PPO(object):
             # adv_s = (adv_s - adv_s.mean())/adv_s.std()
             # adv_l = (adv_l - adv_l.mean())/adv_l.std()
 
-            adv = adv_l
+            # adv = adv_l
 
-            # if adv_l.min() < 0:
-            #     adv_s_scale = adv_s * -adv_l.min()
-            # for i in range(len(adv_s)):
-            #     if adv_s[i] < -0.5 and adv_s_scale[i] < adv_l[i]:
-            #         adv[i] = adv_s_scale[i]
-            #     else:
-            #         adv[i] = adv_l[i]
-
-            # if abs(adv.max()) > abs(adv.min()):
-            #     adv = adv/abs(adv.max())
-            # else:
-            #     adv = adv/abs(adv.min())
+            if abs(adv_l.max()) > abs(adv_l.min()):
+                if abs(adv_l.max()) != 0:
+                    adv = adv_l/abs(adv_l.max())
+            else:
+                if abs(adv_l.min()) != 0:
+                    adv = adv_l/abs(adv_l.min())
 
             # if adv.std() != 0:
             #     adv = (adv - adv.mean())/adv.std()
@@ -434,7 +428,8 @@ class PPO(object):
 
             for iteration in range(UPDATE_STEP):
                 # construct reward predict data                
-                s_, a_, rs_, rl_, adv_ = self.shuffel_data(s, a, rs, rl, adv)   
+                # s_, a_, rs_, rl_, adv_ = self.shuffel_data(s, a, rs, rl, adv)   
+                s_, a_, rs_, rl_, adv_ = s, a, rs, rl, adv
                 count = 0
                 for start in range(0, len(rs), MIN_BATCH_SIZE):
                     end = start + MIN_BATCH_SIZE
@@ -589,15 +584,15 @@ class Worker(object):
         for index in reversed(range(len(buffer_reward))):
             # if buffer_info[index] == 'crash' or buffer_info[index] == 'goal':
             if mode == 'long':
-                if buffer_info[index] == 'goal':
+                if buffer_info[index] == 'goal' or buffer_info[index] == 'on_goal_path':
                     nonterminal = 0
                 else:
                     nonterminal = 1
             else:
-                if buffer_info[index] == 'crash' or buffer_info[index] == 'crash_a':
-                    nonterminal = 0
-                else:
-                    nonterminal = 1                
+                # if buffer_info[index] == 'crash' or buffer_info[index] == 'crash_a':
+                #     nonterminal = 0
+                # else:
+                nonterminal = 1                
             delta = buffer_reward[index] + gamma * buffer_vpred[index+1] * nonterminal - buffer_vpred[index]
             lastgaelam = delta + gamma * LAM * nonterminal * lastgaelam
             buffer_adv[index] = lastgaelam
@@ -627,22 +622,23 @@ class Worker(object):
         buffer_adv_s, buffer_return_s = self.compute_adv_return(buffer_rs, buffer_vpred_s, buffer_info, 'short')
         buffer_adv_l, buffer_return_l = self.compute_adv_return(buffer_rl, buffer_vpred_l, buffer_info, 'long')
 
-        for i in range(len(buffer_return_s)):
-            buffer_return_l[i] = buffer_return_l[i] + (buffer_return_s[i] * 2)
-            # print(before, buffer_rl[i], buffer_return_s[i])
+        buffer_adv_s = buffer_return_s*1
 
-        # buffer_adv_s = buffer_return_s*1
-        # for i in range(len(buffer_adv_s)):
-        #     if buffer_adv_s[i] > -0: # and buffer_adv_s[i] < 0.5:
-        #         buffer_adv_s[i] = 0
+        scaled_adv_s = buffer_adv_s*1
+        if buffer_adv_s.mean() < 0:
+            scaled_adv_s = buffer_adv_s/abs(buffer_adv_s.mean())
 
-        buffer_adv_l = buffer_return_l - buffer_vpred_l[:-1]
+        if buffer_adv_l.max() > 0:
+            buffer_adv_l = buffer_adv_l + scaled_adv_s * buffer_adv_l.max()
+        else:
+            buffer_adv_l = buffer_adv_l + scaled_adv_s * abs(buffer_adv_l.min())
+
         buffer_adv = buffer_adv_s + buffer_adv_l
 
-        if self.wid == 0:
-            print('----')
-            for i in range(len(buffer_adv)):
-                print("rs: %7.4f| rl: %7.4f| vs: %7.4f| vl: %7.4f| adv_s: %7.4f| adv_l: %7.4f| r_s: %7.4f| r_l: %7.4f" %(buffer_rs[i], buffer_rl[i], buffer_vpred_s[i], buffer_vpred_l[i], buffer_adv_s[i], buffer_adv_l[i], buffer_return_s[i], buffer_return_l[i]), buffer_info[i])
+        # if self.wid == 0:
+        #     print('----')
+        #     for i in range(len(buffer_adv)):
+        #         print("rs: %7.4f| rl: %7.4f| vs: %7.4f| vl: %7.4f| adv_s: %7.4f| adv_l: %7.4f| r_s: %7.4f| r_l: %7.4f" %(buffer_rs[i], buffer_rl[i], buffer_vpred_s[i], buffer_vpred_l[i], buffer_adv_s[i], buffer_adv_l[i], buffer_return_s[i], buffer_return_l[i]), buffer_info[i])
             
         info_num = []
         for info in buffer_info:
@@ -669,7 +665,7 @@ class Worker(object):
         g_max = 20
 
         self.env.save_ep()
-        # for _ in range(1):
+        # for _ in range(10):
         #     s = self.env.reset( 0, 0, 1)
         #     self.env.save_ep()
 

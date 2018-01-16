@@ -58,7 +58,7 @@ function start()
 
     _failed_ep_index = 1
     _failed_ep_history = {}
-    _max_history_length = 50
+    _max_history_length = 20
     _min_history_length = 0 --_max_history_length/4
     _sampl_node = 'new'
     _save_ep = true
