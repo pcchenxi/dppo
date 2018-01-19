@@ -12,8 +12,8 @@ import time
 import matplotlib.pyplot as plt
 
 EP_MAX = 500000
-EP_LEN = 200
-N_WORKER = 7               # parallel workers
+EP_LEN = 100
+N_WORKER = 1               # parallel workers
 GAMMA = 1                # reward discount factor
 LAM = 1
 A_LR = 0.0001               # learning rate for actor
@@ -22,8 +22,8 @@ LR = 0.0001
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 2048
-MIN_BATCH_SIZE = 2048       # minimum batch size for updating PPO
+BATCH_SIZE = 128
+MIN_BATCH_SIZE = 128       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
@@ -81,7 +81,6 @@ class PPO(object):
 
         self.closs = tf.reduce_mean(self.closs_s)*0.0 + tf.reduce_mean(self.closs_l)*1 #tf.reduce_mean(tf.maximum(self.closs1, self.closs2)) #
         c_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='net/value')
-        print(c_params)
         self.ctrain_op = tf.train.AdamOptimizer(C_LR).minimize(self.closs, var_list = c_params)
 
         self.total_loss = self.aloss*1 + self.closs*0.25 - 0.0*self.entropy
@@ -194,7 +193,7 @@ class PPO(object):
 
                 if isinstance(Action_Space, gym.spaces.Box):
                     print('continue action',A_DIM, S_DIM)
-                    pi = tf.layers.dense(l1, A_DIM, kernel_initializer=w_init, trainable=trainable)
+                    pi = tf.layers.dense(l1, A_DIM, tf.nn.sigmoid, kernel_initializer=w_init, trainable=trainable)
                     logstd = tf.get_variable(name="logstd", shape=[1, A_DIM], initializer=tf.zeros_initializer(), trainable=trainable)
                     pdparam = tf.concat([pi, pi * 0.0 + logstd], axis=1)
                 else:
@@ -209,8 +208,8 @@ class PPO(object):
             with tf.variable_scope('value'):
                 self.feature_v = self._build_feature_net('feature_v', input_state, trainable=trainable)
                 lv = tf.layers.dense(self.feature_v, 512, tf.nn.relu, kernel_initializer=w_init, name = 'fc_v', trainable=trainable)
-                vs = tf.layers.dense(lv, 1, kernel_initializer=w_init, name = 'fc_vs', trainable=trainable)
-                vl = tf.layers.dense(lv, 1, kernel_initializer=w_init, name = 'fc_vl', trainable=trainable)
+                vl = tf.layers.dense(lv, 1, kernel_initializer=w_init, name = 'fc_vs', trainable=trainable)
+                vs = tf.layers.dense(lv, 1, kernel_initializer=w_init, name = 'fc_vl', trainable=trainable)
 
         pdtype = make_pdtype(Action_Space)
         pd = pdtype.pdfromflat(pdparam)
@@ -353,58 +352,23 @@ class PPO(object):
             adv_s = (adv_s.flatten())
             adv_l = (adv_l.flatten())
 
+            adv = adv_s
 
-            # if len(a_all) >= BATCH_SIZE*2:
-            #     selected_index = np.random.choice(len(a_all), BATCH_SIZE, replace=False)
-            #     for i in selected_index:
-            #         s = np.append([s_all[i]], s, axis = 0)
-            #         a = np.append([a_all[i]], a, axis = 0)
-            #         rs = np.append([rs_all[i]], rs, axis = 0)
-            #         rl = np.append([rl_all[i]], rl, axis = 0)
-            #         adv_s = np.append([adv_s_all[i]], adv_s, axis = 0)
-            #         adv_l = np.append([adv_l_all[i]], adv_l, axis = 0)
+            # scaled_adv_s = adv_s*1
+            # if adv_s.mean() < 0:
+            #     scaled_adv_s = adv_s/abs(adv_s.mean())
 
-            # if a_all == []:
-            #     s_all, a_all, rs_all, rl_all, adv_s_all, adv_l_all = s, a, rs, rl, adv_s, adv_l
+            # if adv_l.max() > 0:
+            #     sclaed_adv_l = adv_l + scaled_adv_s * adv_l.max()
             # else:
-            #     s_all = np.concatenate((s_all, s), axis = 0)
-            #     a_all = np.concatenate((a_all, a), axis = 0)
-            #     rs_all = np.concatenate((rs_all, rs), axis = 0)
-            #     rl_all = np.concatenate((rl_all, rl), axis = 0)
-            #     adv_s_all = np.concatenate((adv_s_all, adv_s), axis = 0)
-            #     adv_l_all = np.concatenate((adv_l_all, adv_l), axis = 0)
+            #     sclaed_adv_l = adv_l + scaled_adv_s * abs(adv_l.min())
 
-            # if len(a_all > 1000):
-            #     s_all = s_all[-1000:]
-            #     a_all = a_all[-1000:]
-            #     rs_all = rs_all[-1000:]
-            #     rl_all = rl_all[-1000:]
-            #     adv_s_all = adv_s_all[-1000:]
-            #     adv_l_all = adv_l_all[-1000:]
-
-
-            # if update_count % UPDATE_L_STEP == 0:
-            #     print('update long adv', update_count, UPDATE_L_STEP)
-            #     s, a, rs, rl, adv_s, adv_l = s_all, a_all, rs_all, rl_all, adv_s_all, adv_l_all 
-            #     adv = adv_l_all 
-            #     update_iter = UPDATE_STEP*8
-            #     print(len(a), len(a))
+            # if abs(sclaed_adv_l.max()) > abs(sclaed_adv_l.min()):
+            #     if abs(sclaed_adv_l.max()) != 0:
+            #         adv = sclaed_adv_l/abs(sclaed_adv_l.max())
             # else:
-            #     print('update short adv', update_count, UPDATE_L_STEP)
-            #     adv = adv_s
-            #     update_iter = UPDATE_STEP
-
-            # adv_s = (adv_s - adv_s.mean())/adv_s.std()
-            # adv_l = (adv_l - adv_l.mean())/adv_l.std()
-
-            # adv = adv_l
-
-            if abs(adv_l.max()) > abs(adv_l.min()):
-                if abs(adv_l.max()) != 0:
-                    adv = adv_l/abs(adv_l.max())
-            else:
-                if abs(adv_l.min()) != 0:
-                    adv = adv_l/abs(adv_l.min())
+            #     if abs(sclaed_adv_l.min()) != 0:
+            #         adv = sclaed_adv_l/abs(sclaed_adv_l.min())
 
             # if adv.std() != 0:
             #     adv = (adv - adv.mean())/adv.std()
@@ -428,8 +392,8 @@ class PPO(object):
 
             for iteration in range(UPDATE_STEP):
                 # construct reward predict data                
-                # s_, a_, rs_, rl_, adv_ = self.shuffel_data(s, a, rs, rl, adv)   
-                s_, a_, rs_, rl_, adv_ = s, a, rs, rl, adv
+                s_, a_, rs_, rl_, adv_ = self.shuffel_data(s, a, rs, rl, adv)   
+                # s_, a_, rs_, rl_, adv_ = s, a, rs, rl, adv
                 count = 0
                 for start in range(0, len(rs), MIN_BATCH_SIZE):
                     end = start + MIN_BATCH_SIZE
@@ -482,7 +446,7 @@ class PPO(object):
                 
                 # print("%8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %6.0i, %8.4f"%(reward[i], r[i], vpred[i], vpred_new[i], adv[i], ratio[i], a[i], a_prob[i][act]), a_prob[i])
 
-            print(rs.mean(), rl.mean())
+            print(adv_l.max(), adv_l.min())
             # ratio_clip = np.clip(ratio, 1-EPSILON, 1+EPSILON)
             # surr_ = ratio*adv.flatten()
             # surr2_ = ratio_clip*adv.flatten()
@@ -500,7 +464,7 @@ class PPO(object):
             # self.write_summary('Loss/t loss', tloss) 
             # self.write_summary('Perf/mean_reward', np.mean(reward))  
 
-            self.saver.save(self.sess, './model/rl/model.cptk') 
+            # self.saver.save(self.sess, './model/rl/model.cptk') 
 
             UPDATE_EVENT.clear()        # updating finished
             GLOBAL_UPDATE_COUNTER = 0   # reset counter
@@ -622,16 +586,16 @@ class Worker(object):
         buffer_adv_s, buffer_return_s = self.compute_adv_return(buffer_rs, buffer_vpred_s, buffer_info, 'short')
         buffer_adv_l, buffer_return_l = self.compute_adv_return(buffer_rl, buffer_vpred_l, buffer_info, 'long')
 
-        buffer_adv_s = buffer_return_s*1
+        # buffer_adv_s = buffer_return_s*1
 
-        scaled_adv_s = buffer_adv_s*1
-        if buffer_adv_s.mean() < 0:
-            scaled_adv_s = buffer_adv_s/abs(buffer_adv_s.mean())
+        # scaled_adv_s = buffer_adv_s*1
+        # if buffer_adv_s.mean() < 0:
+        #     scaled_adv_s = buffer_adv_s/abs(buffer_adv_s.mean())
 
-        if buffer_adv_l.max() > 0:
-            buffer_adv_l = buffer_adv_l + scaled_adv_s * buffer_adv_l.max()
-        else:
-            buffer_adv_l = buffer_adv_l + scaled_adv_s * abs(buffer_adv_l.min())
+        # if buffer_adv_l.max() > 0:
+        #     buffer_adv_l = buffer_adv_l + scaled_adv_s * buffer_adv_l.max()
+        # else:
+        #     buffer_adv_l = buffer_adv_l + scaled_adv_s * abs(buffer_adv_l.min())
 
         buffer_adv = buffer_adv_s + buffer_adv_l
 
@@ -665,9 +629,9 @@ class Worker(object):
         g_max = 20
 
         self.env.save_ep()
-        # for _ in range(10):
-        #     s = self.env.reset( 0, 0, 1)
-        #     self.env.save_ep()
+        for _ in range(10):
+            s = self.env.reset( 0, 0, 1)
+            self.env.save_ep()
 
         update_counter = 0
         ep_count = 0
@@ -719,6 +683,7 @@ class Worker(object):
                 #     a = self.ppo.choose_action(s, True)
                 # else:
                 a = self.ppo.choose_action(s, False)
+                
                 s_, r_short, r_long, done, info = self.env.step(a)
                 vpred_s, vpred_l = self.ppo.get_v(s)
 
@@ -746,7 +711,7 @@ class Worker(object):
 
                 if info == 'crash' and saved_ep == False:
                     has_crash = True
-                    # self.env.save_ep()
+                    self.env.save_ep()
                     # self.env.save_start_end_ep()
                     saved_ep = True
 
@@ -780,7 +745,7 @@ class Worker(object):
                             g_end[index] = self.env.return_end
                             g_index += 1 
 
-                    # if len(g_a) > 0 and np.random.rand() > 0.7:
+                    # if len(g_a) > 0 and np.random.rand() > 0.5:
                     #     index = np.random.randint(len(g_a))
                     #     self.process_and_send(g_s[index], g_a[index], g_rs[index], g_rl[index], g_info[index], g_s_[index], g_end[index])
 
@@ -797,9 +762,9 @@ class Worker(object):
                         break
 
                     if done or t == ep_length-1:
-                        if done and info != 'goal' and saved_ep == False:
-                            # self.env.save_start_end_ep()
-                            saved_ep = True
+                        # if done and info == 'goal' and saved_ep == False:
+                        #     self.env.save_start_end_ep()
+                        #     saved_ep = True
                         break 
 
 

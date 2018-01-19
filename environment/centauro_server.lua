@@ -18,7 +18,7 @@ _bound_y = 1.5
 _init_target_dist = 0.2
 _target_dist = _init_target_dist
 
-_new_ep_prob = 0
+_new_ep_prob = 0.5
 _modifly_prob = 0
 
 function start()
@@ -58,7 +58,7 @@ function start()
 
     _failed_ep_index = 1
     _failed_ep_history = {}
-    _max_history_length = 20
+    _max_history_length = 500
     _min_history_length = 0 --_max_history_length/4
     _sampl_node = 'new'
     _save_ep = true
@@ -164,9 +164,14 @@ end
 
 function save_start_end_ep(inInts,inFloats,inStrings,inBuffer)
     if _save_ep and _g_save_ep == 1 then 
-        _failed_ep_history[_failed_ep_index] = _start_ep
-        _failed_ep_index = _failed_ep_index + 1
-        _failed_ep_index = _failed_ep_index % _max_history_length
+        for i=1, #_current_tra, 1 do 
+            _failed_ep_history[_failed_ep_index] = _current_tra[i]
+            _failed_ep_index = _failed_ep_index + 1
+            _failed_ep_index = _failed_ep_index % _max_history_length
+        end
+        -- _failed_ep_history[_failed_ep_index] = _start_ep
+        -- _failed_ep_index = _failed_ep_index + 1
+        -- _failed_ep_index = _failed_ep_index % _max_history_length
 
         -- local last_ep = convert_current_ep()
         -- _failed_ep_history[_failed_ep_index] = last_ep
