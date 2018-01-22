@@ -36,7 +36,7 @@ for x in range(-1, 2):
 
 observation_range = 1.5
 
-map_size = 2
+map_size = 4
 map_shift = map_size/2
 grid_size = 0.02
 map_pixel = int(map_size/grid_size)
@@ -182,9 +182,9 @@ class Simu_env():
 
         # obs_grid = self.get_observation_gridmap(robot_state[0], robot_state[1])
         self.get_terrain_map(robot_state[2], robot_state[3], robot_state[-3], robot_state[-2])
-        # plt.clf()
-        # plt.imshow(self.terrain_map)
-        # plt.pause(0.01)
+        plt.clf()
+        plt.imshow(self.terrain_map)
+        plt.pause(0.01)
 
         #compute reward and is_finish
         reward_short, reward_long, obs_count, is_finish, info = self.compute_reward(robot_state, action, found_pose)
@@ -278,7 +278,7 @@ class Simu_env():
             info = 'goal'
             # print('goal')
 
-        if dist > 1.2: # out of boundary
+        if robot_state[1] > 2: # out of boundary
             is_finish = True
             reward_short = REWARD_CRASH
             info = 'out'
@@ -409,22 +409,43 @@ class Simu_env():
         terrain_map_t = np.zeros((map_pixel, map_pixel), np.float32)
 
         _, _, obstacle_info, _, _ = self.call_sim_function('centauro', 'get_obstacle_info')
-        for i in range(0, len(obstacle_info), 5):
+        for i in range(0, len(obstacle_info), 7):
             x = obstacle_info[i+0] + map_shift
             y = obstacle_info[i+1] + map_shift
 
-            if x >= 5 or x <= 0:
+            if x >= 6 or x <= 0:
                 continue
-            if y >= 5 or y <= 0:
+            if y >= 6 or y <= 0:
                 continue
-            r = obstacle_info[i+2]
-            h = obstacle_info[i+4]
+            if obstacle_info[i+6] == 5:
+                continue
+                r = obstacle_info[i+2]
+                h = obstacle_info[i+4]
+                ori = obstacle_info[i+5]
 
-            col = map_pixel - int(y/grid_size)
-            row = map_pixel - int(x/grid_size)
-            radius = int(r/grid_size )
-            height = (h)/(0.5)  #255.0/0.5 * h 
-            cv2.circle(terrain_map_o, (col,row), radius, height, -1)
+                col = map_pixel - int(y/grid_size)
+                row = map_pixel - int(x/grid_size)
+                radius = int(r/grid_size )
+                height = (h)/(0.5)  #255.0/0.5 * h 
+                cv2.circle(terrain_map_o, (col,row), radius, height, -1)
+            elif obstacle_info[i+6] == 3:
+                w = int(obstacle_info[i+2]/grid_size)
+                b = int(obstacle_info[i+3]/grid_size)
+                col = int(map_pixel - y/grid_size)
+                row = int(map_pixel - x/grid_size)
+
+                rect = ((row, col), (w, b), obstacle_info[i+5]*180/3.14)
+                box = cv2.boxPoints(rect) # cv2.boxPoints(rect) for OpenCV 3.x
+                box = np.int0(box)
+                cv2.drawContours(terrain_map_o,[box],0,1,-1)                
+                # print(obstacle_info[i+5])
+                # if obstacle_info[i+5] == 0:
+                #     start = (int(col-w/2), int(row-b/2))
+                #     end = (int(col+w/2), int(row+b/2))
+                # else:
+                #     start = (int(col-b/2), int(row-w/2))
+                #     end = (int(col+b/2), int(row+w/2))                    
+                # cv2.rectangle(terrain_map_o, start, end, 1, -1)
 
         x = t_x + map_shift
         y = t_y + map_shift 
@@ -442,28 +463,7 @@ class Simu_env():
         self.terrain_map[:,:,2] = terrain_map_r
 
         self.terrain_map = terrain_map_o
-        # print(self.terrain_map)
-        # print('max', self.terrain_map.max())
-        # ## for boundaries
-        # boundary_height = 1
-        # cv2.line(self.terrain_map, (0, 0), (0, self.terrain_map.shape[1]), 1, 3)
-        # cv2.line(self.terrain_map, (0, 0), (self.terrain_map.shape[0], 0), 1, 3)
-        # cv2.line(self.terrain_map, (0, self.terrain_map.shape[1]), (self.terrain_map.shape[0], self.terrain_map.shape[1]), boundary_height, 3)
-        # cv2.line(self.terrain_map, (self.terrain_map.shape[0], 0), (self.terrain_map.shape[0], self.terrain_map.shape[1]), boundary_height, 3)
 
-        # # ## for two static obstacles
-        # # -3.4, -1, 2.6, -1      -2.6, 1, 3.4, 1
-        # p1_r = self.terrain_map.shape[0] - int((-1 + map_shift)/grid_size)
-        # p1_c = int((-1.9 + map_shift)/grid_size)
-        # p2_r = self.terrain_map.shape[0] - int((-1 + map_shift)/grid_size)
-        # p2_c = int((1.1 + map_shift)/grid_size)        
-
-        # p3_r = self.terrain_map.shape[0] - int((1 + map_shift)/grid_size)
-        # p3_c = int((-1.1 + map_shift)/grid_size)
-        # p4_r = self.terrain_map.shape[0] - int((1 + map_shift)/grid_size)
-        # p4_c = int((1.9 + map_shift)/grid_size)     
-        # cv2.line(self.terrain_map, (p1_c, p1_r), (p2_c, p2_r), boundary_height, 1)
-        # cv2.line(self.terrain_map, (p3_c, p3_r), (p4_c, p4_r), boundary_height, 1)
 
         # np.save("./data/auto/map", self.terrain_map)
         # # mpimg.imsave('./data/auto/map.png', self.terrain_map)

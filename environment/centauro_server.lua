@@ -49,6 +49,7 @@ function start()
     _obstacle_dynamic_hds = simGetCollectionObjects(_obstacle_dynamic_collection)
 
     _obs_hds = check_avaiable_obstacle_hds()
+    print(#_obs_hds)
 
     _current_tra = {}
     _current_ep = {}
@@ -79,14 +80,14 @@ end
 
 function check_avaiable_obstacle_hds()
     hds = {}
-    for i=1, #_obstacle_dynamic_hds, 1 do 
-        local obs_pos_global = simGetObjectPosition(_obstacle_dynamic_hds[i], -1)
+    for i=1, #_obstacles_hds, 1 do 
+        local obs_pos_global = simGetObjectPosition(_obstacles_hds[i], -1)
         
         local x = math.abs(obs_pos_global[1])
         local y = math.abs(obs_pos_global[2])
 
-        if x < 2.5 and y < 2.5 then   
-            hds[#hds + 1] = _obstacle_dynamic_hds[i]
+        if x < 2 and y < 2 then   
+            hds[#hds + 1] = _obstacles_hds[i]
         end
     end
     return hds
@@ -214,12 +215,12 @@ function move_robot(inInts,inFloats,inStrings,inBuffer)
 end
 
 function get_obstacle_info(inInts,inFloats,inStrings,inBuffer)
-
     local obs_info = {}
     for i=1, #_obs_hds, 1 do 
         -- local pos = simGetObjectPosition(_obs_hds[i], -1)
         local pos = simGetObjectPosition(_obs_hds[i], _robot_hd)
         local robot_pos =simGetObjectPosition(_robot_hd,-1)
+        local obs_ori = simGetObjectOrientation(_obs_hds[i], _robot_hd)
         local res, type, dim = simGetShapeGeomInfo(_obs_hds[i])
         obs_info[#obs_info+1] = pos[1]
         obs_info[#obs_info+1] = pos[2]
@@ -228,9 +229,12 @@ function get_obstacle_info(inInts,inFloats,inStrings,inBuffer)
         obs_info[#obs_info+1] = dim[2]
         obs_info[#obs_info+1] = dim[3]
 
+        obs_info[#obs_info+1] = obs_ori[3]
+        obs_info[#obs_info+1] = type
+
         -- print('shape: ', dim[1], dim[2], dim[3], dim[4])
     end
-
+    -- print(#obs_info, #_obs_hds)
     return {}, obs_info, {}, ''
 end
 
@@ -387,8 +391,8 @@ function sample_obstacle_position()
             visable_count = visable_count + 1
         else 
             local obs_pos = simGetObjectPosition(_obs_hds[i], -1)
-            obs_pos[1] = _bound_x*5
-            obs_pos[2] = _bound_y*5  
+            obs_pos[1] = _bound_x*10
+            obs_pos[2] = _bound_y*10 
             simSetObjectPosition(_obs_hds[i], -1, obs_pos)
         end 
     end
@@ -427,16 +431,16 @@ function sample_new_ep()
     _pre_target_ori = target_ori
     _pre_target_l = (math.random() - 0.5) * 2 * 0.05 + 0.07
 
-    -- ep type
-    if math.random() < 0.8 then 
-        local obs_pos = {}
-        local obs_index = math.random(#_obs_hds)
-        local obs_pos_before =  simGetObjectPosition(_obs_hds[obs_index], -1)
-        obs_pos[1] = (math.random() - 0.5)*2 * 0.3 + (robot_pos[1] + target_pos[1])/2
-        obs_pos[2] = (math.random() - 0.5)*2 * 0.3 + (robot_pos[2] + target_pos[2])/2
-        obs_pos[3] = obs_pos_before[3]
-        simSetObjectPosition(_obs_hds[obs_index], -1, obs_pos)
-    end
+    -- -- ep type
+    -- if math.random() < 0.8 then 
+    --     local obs_pos = {}
+    --     local obs_index = math.random(#_obs_hds)
+    --     local obs_pos_before =  simGetObjectPosition(_obs_hds[obs_index], -1)
+    --     obs_pos[1] = (math.random() - 0.5)*2 * 0.3 + (robot_pos[1] + target_pos[1])/2
+    --     obs_pos[2] = (math.random() - 0.5)*2 * 0.3 + (robot_pos[2] + target_pos[2])/2
+    --     obs_pos[3] = obs_pos_before[3]
+    --     simSetObjectPosition(_obs_hds[obs_index], -1, obs_pos)
+    -- end
 
     simSetObjectPosition(_robot_hd, -1, robot_pos)
     simSetObjectOrientation(_robot_hd, -1, robot_ori)
