@@ -19,7 +19,7 @@ _init_target_dist = 0.2
 _target_dist = _init_target_dist
 
 _new_ep_prob = 0
-_modifly_prob = 0
+_modifly_prob = 0.9
 
 function start()
     -- sleep (3)
@@ -625,23 +625,39 @@ function restore_ep(ep, modifly)
         -- local y_mid = (target_pos[2] + robot_pos[2] )/2    
         -- robot_pos[1] = (math.random() - 0.5) *2 * _target_dist/2 + x_mid
         -- robot_pos[2] = (math.random() - 0.5) *2 * _target_dist/2 + y_mid
-        local modifly_tpye =  math.random(3)
+        local modifly_tpye = math.random(3)
         if _target_dist ~= _init_target_dist then 
             shift = 0.0
             modifly_tpye = 3
             robot_joints = _start_joint_values
         end        
-        if modifly_tpye == 1 then 
+        if modifly_tpye == 0 then 
             local x_mid = (target_pos[1] + robot_pos[1] )/2
             local y_mid = (target_pos[2] + robot_pos[2] )/2    
             robot_pos[1] = (math.random() - 0.5) *2 * _target_dist/2 + x_mid
             robot_pos[2] = (math.random() - 0.5) *2 * _target_dist/2 + y_mid
-        elseif modifly_tpye == 2 then    
-            robot_pos[1] = (math.random() - 0.5) *2 * shift + robot_pos[1]
-            robot_pos[2] = (math.random() - 0.5) *2 * shift + robot_pos[2]
+        -- elseif modifly_tpye == 2 then    
+        --     robot_pos[1] = (math.random() - 0.5) *2 * shift + robot_pos[1]
+        --     robot_pos[2] = (math.random() - 0.5) *2 * shift + robot_pos[2]
+        elseif modifly_tpye == 1 then
+            robot_pos[1] = (math.random() - 0.5) *2 + target_pos[1]
+            robot_pos[2] = (math.random() - 0.5) *2 + target_pos[2]
+        elseif modifly_tpye == 2 then
+            robot_pos[1] = (math.random() - 0.5) *1
+            robot_pos[2] = (math.random() - 0.5) *1
         else 
-            robot_pos[1] = (math.random() - 0.5) *2 * shift + target_pos[1]
-            robot_pos[2] = (math.random() - 0.5) *2 * shift + target_pos[2]
+            robot_pos[1] = (math.random() - 0.5) *1
+            robot_pos[2] = (math.random() - 0.5) *1
+            if robot_pos[1] < 0 then 
+                robot_pos[1] = robot_pos[1] - 1
+            else 
+                robot_pos[1] = robot_pos[1] + 1
+            end
+            if robot_pos[2] < 0 then 
+                robot_pos[2] = robot_pos[2] - 1
+            else 
+                robot_pos[2] = robot_pos[2] + 1
+            end
         end 
         robot_ori[3] = (math.random() - 0.5) *2 * math.pi
     end 
