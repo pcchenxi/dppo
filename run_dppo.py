@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 
 EP_MAX = 500000
 EP_LEN = 100
-N_WORKER = 7               # parallel workers
+N_WORKER = 1               # parallel workers
 GAMMA = 1                # reward discount factor
 LAM = 1
 A_LR = 0.0001               # learning rate for actor
@@ -23,8 +23,8 @@ LR = 0.0005
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 5120
-MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
+BATCH_SIZE = 10240
+MIN_BATCH_SIZE = 256       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
@@ -92,6 +92,7 @@ class PPO(object):
         self.saver = tf.train.Saver()
         self.summary_writer = tf.summary.FileWriter('./log', self.sess.graph)   
 
+        self.pi_prob = tf.nn.softmax(pd.logits)
         self.aloss = pg_loss 
         self.closs = tf.reduce_mean(vf_losses1) 
         self.total_loss = loss
@@ -200,11 +201,11 @@ class PPO(object):
     def get_action_prob(self, s):
         s = s[np.newaxis, :]
         prob = 0
-        # prob = self.sess.run(self.pi_prob, {self.tfs: s, self.tf_is_train: False})[0]
+        prob = self.sess.run(self.pi_prob, {self.tfs: s, self.tf_is_train: False})[0]
 
-        # plt.clf()
-        # plt.scatter(range(A_DIM+1), np.append(prob, 1.0).flatten())
-        # plt.pause(0.01)
+        plt.clf()
+        plt.scatter(range(A_DIM+1), np.append(prob, 1.0).flatten())
+        plt.pause(0.01)
 
         return prob
 
@@ -545,7 +546,7 @@ class Worker(object):
             ep_count += 1
             saved_ep = False
             
-            s = self.env.reset( 0, 1, 1)
+            s = self.env.reset( 0, 0, 1)
 
             while(1):
                 if not ROLLING_EVENT.is_set():                  # while global PPO is updating
@@ -568,6 +569,7 @@ class Worker(object):
                     # break
 
                 a = self.ppo.choose_action(s, False)
+                self.ppo.get_action_prob(s)
                 s_, r_short, r_long, done, info = self.env.step(a)
                 vpred_s, vpred_l = self.ppo.get_v(s)
 
@@ -598,10 +600,10 @@ class Worker(object):
                 #     # self.env.save_start_end_ep()
                 #     saved_ep = True
 
-                # if self.wid == 0:
-                #     if t == ep_length-1 or done:
-                #         buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
-                #         break
+                if self.wid == 0:
+                    if t == ep_length-1 or done:
+                        buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
+                        break
                 #     else:
                 #         continue
 
