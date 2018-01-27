@@ -18,9 +18,9 @@ for x in range(-1, 2):
         for w in range(-1, 2):
             for h in range(-1, 2):
                 for l in range(-1, 2):
-        # w = 0
-        # h = 0
-        # l = 0        
+                    # w = 0
+                    # h = 0
+                    # l = 0        
                     action = []
                     action.append(x)
                     action.append(y)
@@ -36,7 +36,7 @@ for x in range(-1, 2):
 
 observation_range = 1.5
 
-map_size = 2
+map_size = 3
 map_shift = map_size/2
 grid_size = 0.02
 map_pixel = int(map_size/grid_size)
@@ -51,9 +51,9 @@ action_space = len(action_list)
 # action_type = spaces.Box(-1, 1, shape = (action_space,))
 action_type = spaces.Discrete(action_space)
 
-REWARD_GOAL = 100
+REWARD_GOAL = 1
 REWARD_STEP =  -0.01
-REWARD_CRASH = -1
+REWARD_CRASH = REWARD_STEP * 5
 
 class Simu_env():
     def __init__(self, port_num):
@@ -69,7 +69,6 @@ class Simu_env():
         self.total_ep_reward = REWARD_GOAL
         self.goal_reached = False
         self.goal_path = False
-        self.goal_dist = 0
         self.goal_counter = 0
         self.return_end = -1
 
@@ -139,7 +138,7 @@ class Simu_env():
         self.ep_step = 0
         self.state_pre = []
         # target_dist = 0.15+0.4*self.ep_count/3000
-        target_dist = 1
+        target_dist = 1.5
         self.goal_path = False
 
         if target_dist > 1:
@@ -151,10 +150,12 @@ class Simu_env():
         # print('after reset', self.dist_pre)
         self.total_ep_reward = REWARD_GOAL
 
+        self.init_step = 1
         self.ep_count += 1
         return state
 
     def step(self, action): 
+        self.init_step -= 0.005
         if isinstance(action, np.int32) or isinstance(action, int) or isinstance(action, np.int64):
             if action == -1:
                 action = [0,0,0,0,0]
@@ -218,21 +219,20 @@ class Simu_env():
 
         robot_l = robot_state[-2]
         robot_h = robot_state[-3]
-        diff_l = abs(robot_l)
+        diff_l = abs(robot_l-0.13)
         diff_h = abs(robot_h)
 
         min_dist = robot_state[-1]
 
-        off_pose = 1 - max(diff_l, diff_h)/0.15
-        if off_pose < 0:
-            off_pose = 0
+        off_pose = max(diff_l, diff_h)/0.2 * -0.5
+
         obs_reward = min_dist/0.2
         # reward_short = reward_short * obs_reward
 
         dist = robot_state[0]
-        target_reward = -(dist - self.dist_pre)/0.1 * REWARD_GOAL/2
+        target_reward = -(dist - self.dist_pre)
         # if target_reward <= 0:
-        #     target_reward = -1 #REWARD_CRASH
+        #     target_reward = 0
 
         self.dist_pre = dist
         self.min_obsdist_pre = min_dist
@@ -254,15 +254,15 @@ class Simu_env():
 
         if found_pose == bytearray(b"a"):       # when collision or no pose can be found
             # is_finish = True
-            reward_short = REWARD_CRASH
+            reward_short = -1
             # print('crash a')
             # reward = reward*10       
             info = 'crash_a'
 
         if found_pose == bytearray(b"c"):       # when collision or no pose can be found
             # is_finish = True
-            reward_short = REWARD_CRASH
-            reward_long += REWARD_STEP*10
+            reward_short = -1
+            reward_long += REWARD_CRASH
             # print('crash')
             # reward = reward * 10
             info = 'crash'
@@ -270,35 +270,32 @@ class Simu_env():
         # if np.count_nonzero(action) == 0:
             # event_reward = REWARD_CRASH
 
-        if dist < 0.1 and info != 'crash': # and diff_l < 0.02:
+        if dist < 0.2 and info != 'crash': # and diff_l < 0.02:
         # if obs_count == 0 or dist < 0.1:
             is_finish = True
             reward_long = REWARD_GOAL
-            # reward = 1/(dist+1)*REWARD_GOAL
             info = 'goal'
-            # print('goal')
 
-        if dist > 1.2: # out of boundary
+        if robot_state[1] > 1: # out of boundary
             is_finish = True
-            reward_short = REWARD_CRASH
+            reward_short = -1
             info = 'out'
             # print('outof bound', robot_state[1])
 
-        if obs_count == 0:
-            if self.goal_path == False and info != 'crash' and info != 'goal':
-                reward_long = 0.5*REWARD_GOAL
-                self.goal_path = True
-                self.goal_dist = dist
-                info = 'on_goal_path'
-                # print('on goal')
-        else:
-            if self.goal_path == True and info != 'crash' and info != 'goal':
-                reward_long = -0.5*REWARD_GOAL
-                self.goal_path = False
-                info = 'off_goal_path'
-                # print('off goal')
-                # info = 'off_goal_path'
-            # print('goal')
+        # if obs_count == 0:
+        #     if self.goal_path == False and info != 'crash' and info != 'goal':
+        #         reward_long = 0.5*REWARD_GOAL
+        #         self.goal_path = True
+        #         info = 'on_goal_path'
+        #         # print('on goal')
+        # else:
+        #     if self.goal_path == True and info != 'crash' and info != 'goal':
+        #         reward_long = -0.5*REWARD_GOAL
+        #         self.goal_path = False
+        #         info = 'off_goal_path'
+        #         # print('off goal')
+        #         # info = 'off_goal_path'
+        #     # print('goal')
 
         # if info == 'goal':
         #     self.goal_counter += 1
@@ -325,7 +322,8 @@ class Simu_env():
         #     reward_short = REWARD_CRASH
         #     info = 'crash_a'
 
-        reward_long += REWARD_STEP
+        reward_long += REWARD_STEP + target_reward
+        # reward_short += off_pose
         return reward_short, reward_long, obs_count, is_finish, info
 
     ####################################  interface funcytion  ###################################
@@ -409,22 +407,40 @@ class Simu_env():
         terrain_map_t = np.zeros((map_pixel, map_pixel), np.float32)
 
         _, _, obstacle_info, _, _ = self.call_sim_function('centauro', 'get_obstacle_info')
-        for i in range(0, len(obstacle_info), 5):
+        for i in range(0, len(obstacle_info), 7):
             x = obstacle_info[i+0] + map_shift
             y = obstacle_info[i+1] + map_shift
 
-            if x >= 5 or x <= 0:
+            if x >= 6 or x <= 0:
                 continue
-            if y >= 5 or y <= 0:
+            if y >= 6 or y <= 0:
                 continue
-            r = obstacle_info[i+2]
-            h = obstacle_info[i+4]
+            if obstacle_info[i+6] == 5:
+                r = obstacle_info[i+2]
+                h = obstacle_info[i+4]
+                col = map_pixel - int(y/grid_size)
+                row = int(x/grid_size)
+                radius = int(r/grid_size )
+                height = (h)/(0.5)  #255.0/0.5 * h 
+                cv2.circle(terrain_map_o, (col,row), radius, height, -1)
+            elif obstacle_info[i+6] == 3:
+                w = int(obstacle_info[i+2]/grid_size)
+                b = int(obstacle_info[i+3]/grid_size)
+                col = int(map_pixel - y/grid_size)
+                row = int(map_pixel - x/grid_size)
 
-            col = map_pixel - int(y/grid_size)
-            row = map_pixel - int(x/grid_size)
-            radius = int(r/grid_size )
-            height = (h)/(0.5)  #255.0/0.5 * h 
-            cv2.circle(terrain_map_o, (col,row), radius, height, -1)
+                rect = ((row, col), (w, b), obstacle_info[i+5]*180/3.14)
+                box = cv2.boxPoints(rect) # cv2.boxPoints(rect) for OpenCV 3.x
+                box = np.int0(box)
+                cv2.drawContours(terrain_map_o,[box],0,1,-1)                
+                # print(obstacle_info[i+5])
+                # if obstacle_info[i+5] == 0:
+                #     start = (int(col-w/2), int(row-b/2))
+                #     end = (int(col+w/2), int(row+b/2))
+                # else:
+                #     start = (int(col-b/2), int(row-w/2))
+                #     end = (int(col+b/2), int(row+w/2))                    
+                # cv2.rectangle(terrain_map_o, start, end, 1, -1)
 
         x = t_x + map_shift
         y = t_y + map_shift 
@@ -442,28 +458,7 @@ class Simu_env():
         self.terrain_map[:,:,2] = terrain_map_r
 
         self.terrain_map = terrain_map_o
-        # print(self.terrain_map)
-        # print('max', self.terrain_map.max())
-        # ## for boundaries
-        # boundary_height = 1
-        # cv2.line(self.terrain_map, (0, 0), (0, self.terrain_map.shape[1]), 1, 3)
-        # cv2.line(self.terrain_map, (0, 0), (self.terrain_map.shape[0], 0), 1, 3)
-        # cv2.line(self.terrain_map, (0, self.terrain_map.shape[1]), (self.terrain_map.shape[0], self.terrain_map.shape[1]), boundary_height, 3)
-        # cv2.line(self.terrain_map, (self.terrain_map.shape[0], 0), (self.terrain_map.shape[0], self.terrain_map.shape[1]), boundary_height, 3)
 
-        # # ## for two static obstacles
-        # # -3.4, -1, 2.6, -1      -2.6, 1, 3.4, 1
-        # p1_r = self.terrain_map.shape[0] - int((-1 + map_shift)/grid_size)
-        # p1_c = int((-1.9 + map_shift)/grid_size)
-        # p2_r = self.terrain_map.shape[0] - int((-1 + map_shift)/grid_size)
-        # p2_c = int((1.1 + map_shift)/grid_size)        
-
-        # p3_r = self.terrain_map.shape[0] - int((1 + map_shift)/grid_size)
-        # p3_c = int((-1.1 + map_shift)/grid_size)
-        # p4_r = self.terrain_map.shape[0] - int((1 + map_shift)/grid_size)
-        # p4_c = int((1.9 + map_shift)/grid_size)     
-        # cv2.line(self.terrain_map, (p1_c, p1_r), (p2_c, p2_r), boundary_height, 1)
-        # cv2.line(self.terrain_map, (p3_c, p3_r), (p4_c, p4_r), boundary_height, 1)
 
         # np.save("./data/auto/map", self.terrain_map)
         # # mpimg.imsave('./data/auto/map.png', self.terrain_map)
