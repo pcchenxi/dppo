@@ -14,19 +14,19 @@ import matplotlib.pyplot as plt
 
 EP_MAX = 500000
 EP_LEN = 50
-N_WORKER = 1               # parallel workers
-GAMMA = 0.9                # reward discount factor
-LAM = 1
+N_WORKER = 4               # parallel workers
+GAMMA = 0.95                # reward discount factor
+LAM = 0.98
 A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0001               # learning rate for critic
 LR = 0.0005
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 10240
-MIN_BATCH_SIZE = 128       # minimum batch size for updating PPO
+BATCH_SIZE = 2048
+MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
 
-UPDATE_STEP = 3            # loop update operation n-steps
+UPDATE_STEP = 5            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
 GAME = 'Pendulum-v0'
 S_DIM, A_DIM = centauro_env.observation_space, centauro_env.action_space 
@@ -75,7 +75,7 @@ class PPO(object):
         pg_loss = tf.reduce_mean(tf.maximum(pg_losses, pg_losses2))
         approxkl = .5 * tf.reduce_mean(tf.square(neglogpac - OLDNEGLOGPAC))
         clipfrac = tf.reduce_mean(tf.to_float(tf.greater(tf.abs(ratio - 1.0), EPSILON)))
-        loss = pg_loss - self.entropy * 0 + vf_loss
+        loss = pg_loss - self.entropy * 0.001 + vf_loss
 
         params = tf.trainable_variables(scope='net')
         print(params)
@@ -100,7 +100,7 @@ class PPO(object):
         self.ratio = ratio
         self.grad_norm = _grad_norm
 
-        self.load_model()   
+        # self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')
@@ -113,7 +113,7 @@ class PPO(object):
 
     def write_summary(self, summary_name, value):
         summary = tf.Summary()
-        summary.value.add(tag=summary_name, simple_value=float(value))
+        # summary.value.add(tag=summary_name, simple_value=float(value))
         self.summary_writer.add_summary(summary, GLOBAL_EP)
         self.summary_writer.flush()  
 
@@ -138,13 +138,14 @@ class PPO(object):
             state_size = 4
             num_img = S_DIM - state_size 
             img_size = int(math.sqrt(num_img))
+            print('image size', img_size)
 
             ob_grid = tf.slice(input_state, [0, 0], [-1, num_img], name = 'slice_grid')
             ob_state = tf.slice(input_state, [0, num_img], [-1, state_size], name = 'slice_ob') 
 
             reshaped_grid = tf.reshape(ob_grid,shape=[-1, img_size, img_size, 1]) 
-            h = tf.layers.conv2d(inputs=reshaped_grid, filters=16, kernel_size=[8, 8], strides = 4, name = 'conv1', padding="valid", kernel_initializer=tf.orthogonal_initializer(2), activation=tf.nn.relu, trainable=trainable )
-            h1 = tf.layers.conv2d(inputs=h, filters=32, kernel_size=[4, 4], strides = 2, name = 'conv2', padding="valid", kernel_initializer=tf.orthogonal_initializer(2), activation=tf.nn.relu, trainable=trainable )
+            h = tf.layers.conv2d(inputs=reshaped_grid, filters=16, kernel_size=[3, 3], strides = 2, name = 'conv1', padding="valid", kernel_initializer=tf.orthogonal_initializer(2), activation=tf.nn.relu, trainable=trainable )
+            h1 = tf.layers.conv2d(inputs=h, filters=32, kernel_size=[3, 3], strides = 1, name = 'conv2', padding="valid", kernel_initializer=tf.orthogonal_initializer(2), activation=tf.nn.relu, trainable=trainable )
             h2 = tf.layers.conv2d(inputs=h1, filters=32, kernel_size=[3, 3], strides = 1, name = 'conv3', padding="valid", kernel_initializer=tf.orthogonal_initializer(2), activation=tf.nn.relu, trainable=trainable )
             h3 = tf.contrib.layers.flatten(h2)
 
@@ -456,7 +457,7 @@ class Worker(object):
         
         vpred_s_, vpred_l_ = self.ppo.get_v(s_)
         vpred_s_ = 0
-
+        # vpred_l_ = 0
         buffer_vpred_s = np.append(buffer_vpred_s, vpred_s_)
         buffer_vpred_l = np.append(buffer_vpred_l, vpred_l_)
         buffer_adv_s, buffer_return_s = self.compute_adv_return(buffer_rs, buffer_vpred_s, buffer_info, 'short')
@@ -496,18 +497,19 @@ class Worker(object):
         bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return_s)[:, np.newaxis], np.array(buffer_return_l)[:, np.newaxis], np.array(buffer_adv_s)[:, np.newaxis], np.array(buffer_adv_l)[:, np.newaxis], np.vstack(info_num)     
         QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
 
-    def test_model(self):
+    def test_model(self, ep_num):
         goal_num = 0
         saved_ep = 0
-        # print('!!!') 
-        for test_num in range(50):
+        max_step = EP_LEN
+        print('searching for failed ep', ep_num) 
+        for test_num in range(100):
             s = self.env.reset(0, 0, 1)
-            for step in range(50):
-                a = self.ppo.choose_action(s, True)
+            for step in range(max_step):
+                a = self.ppo.choose_action(s, False)
                 s_, r_short, r_long, done, info = self.env.step(a)
 
                 s = s_
-                if done:
+                if done or step == max_step-1:
                     # print(test_num, info)
                     if info == 'goal':
                         goal_num += 1     
@@ -515,7 +517,7 @@ class Worker(object):
                         self.env.save_start_end_ep()
                         saved_ep += 1
                     break
-            if saved_ep > 10:
+            if saved_ep > ep_num:
                 break
         print (goal_num/10)
 
@@ -531,10 +533,10 @@ class Worker(object):
         g_max = 20
 
         # self.env.save_ep()
-        # self.test_model()
-        for _ in range(2):
-            s = self.env.reset( 0, 0, 1)
-            self.env.save_ep()
+        self.test_model(5)
+        # for _ in range(2):
+        #     s = self.env.reset( 0, 0, 1)
+        #     self.env.save_ep()
 
         update_counter = 0
         ep_count = 0
@@ -550,17 +552,17 @@ class Worker(object):
             ep_count += 1
             saved_ep = False
             
-            s = self.env.reset( 0, 0, 1)
+            s = self.env.reset( 0, 1, 1)
 
             while(1):
                 if not ROLLING_EVENT.is_set():                  # while global PPO is updating
                     ROLLING_EVENT.wait()                        # wait until PPO is updated
                     buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
-                    if update_counter%3 == 0:
+                    # if update_counter%1 == 0:
                         # self.env.clear_history()
-                        # self.test_model()
-                        s = self.env.reset( 0, 0, 1)
-                        self.env.save_ep()
+                    self.test_model(5)
+                        # s = self.env.reset( 0, 0, 1)
+                        # self.env.save_ep()
                     # self.env.clear_history_leave_one()
                     print(len(g_a))
                     update_counter += 1
@@ -650,7 +652,7 @@ class Worker(object):
                         COORD.request_stop()
                         break
 
-                    if done or t == ep_length-1:
+                    if info == 'goal' or info == 'out' or t == ep_length-1:
                         # if done != 'goal':
                         #     self.env.save_start_end_ep()
                         break 

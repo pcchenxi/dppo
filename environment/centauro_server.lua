@@ -19,7 +19,7 @@ _init_target_dist = 0.2
 _target_dist = _init_target_dist
 
 _new_ep_prob = 0
-_modifly_prob = 0.9
+_modifly_prob = 0.7
 
 function start()
     -- sleep (3)
@@ -58,7 +58,7 @@ function start()
 
     _failed_ep_index = 1
     _failed_ep_history = {}
-    _max_history_length = 4
+    _max_history_length = 25
     _min_history_length = 0 --_max_history_length/4
     _sampl_node = 'new'
     _save_ep = true
@@ -105,6 +105,8 @@ function get_minimum_obs_dist(inInts,inFloats,inStrings,inBuffer)
 end
 
 function reset(inInts,inFloats,inStrings,inBuffer)
+    global_counter = global_counter + 1
+
     local radius = inFloats[1]
     _init_target_dist = radius
     local env_mode = inFloats[2] --   0: random environment   1: target environment 
@@ -255,9 +257,11 @@ function get_robot_state(inInts,inFloats,inStrings,inBuffer)
     local target_dist = math.sqrt(target_pos[1]*target_pos[1] + target_pos[2]*target_pos[2])
 
     state[1] = target_dist
-    state[2] = dist_to_center
-    state[3] = target_pos[1]
-    state[4] = target_pos[2]  --(target_dist/(_target_dist*2)-0.5) * 2
+    -- state[2] = dist_to_center
+    state[2] = pos[1]
+    state[3] = pos[2]
+    state[4] = target_pos[1]
+    state[5] = target_pos[2]  --(target_dist/(_target_dist*2)-0.5) * 2
     -- state[3] = target_ori[3]
     -- state[4] = target_pos[3] - 0.4
     -- state[5] = _pre_target_l
@@ -330,46 +334,27 @@ function applyPath(task_hd, path, speed)
 end
 
 
--- function sample_obstacle_position()
---     for i=1, #_obs_hds, 1 do
---         local obs_pos = simGetObjectPosition(_obs_hds[i], -1)
-
---         if _obs_mode == 'random' then      
---             obs_pos[1] = (math.random()-0.5)*2 * _bound_x 
---             obs_pos[2] = (math.random()-0.5)*2 * _bound_y        
---         else 
---             obs_pos[1] = (math.random()-0.5)*2 * 0.05 + obs_pos[1]--(math.random()-0.5)*2 * _bound_x 
---             obs_pos[2] = (math.random()-0.5)*2 * 0.05 + obs_pos[2]--(math.random()-0.5)*2 * _bound_y 
---         end
-
---         if obs_pos[1] > _bound_x then
---             obs_pos[1] = _bound_x
---         elseif obs_pos[1] < -_bound_x then 
---             obs_pos[1] = -_bound_x
---         end
-
---         if obs_pos[2] > _bound_y then
---             obs_pos[2] = _bound_y
---         elseif obs_pos[2] < -_bound_y then 
---             obs_pos[2] = -_bound_y
---         end
-
---         simSetObjectPosition(_obs_hds[i], -1, obs_pos)
---     end
--- end
-
 function sample_obstacle_position()
     local visable_count = 0
-    local max_count = math.random(4)
+    local max_count = math.random(3)
     print(max_count)
-    for i=1, #_obs_hds, 1 do
+    local start = math.random(#_obs_hds)
+    for i=start, start + #_obs_hds, 1 do
         local visable = math.random()
-        if visable > 0.5 and visable_count < max_count then 
-            local obs_pos = simGetObjectPosition(_obs_hds[i], -1)
+        index = i%#_obs_hds + 1
+        if visable > 0.3 and visable_count < max_count then 
+            local obs_pos = simGetObjectPosition(_obs_hds[index], -1)
 
             if _obs_mode == 'random' then      
-                obs_pos[1] = (math.random()-0.5)*2 * 1
+                -- obs_pos[1] = (math.random()-0.5)*2 * 0.5
+                local side = math.random()
+                obs_pos[1] = (math.random()-0.5)*2 * 0.25
                 obs_pos[2] = 0 --(math.random()-0.5)*2 * 1       
+                if side < 0.5 then 
+                    obs_pos[1] = obs_pos[1] - 0.5
+                else
+                    obs_pos[1] = obs_pos[1] + 0.5
+                end
             else 
                 obs_pos[1] = (math.random()-0.5)*2 * 0.05 + obs_pos[1]--(math.random()-0.5)*2 * _bound_x 
                 obs_pos[2] = 0 --(math.random()-0.5)*2 * 0.05 + obs_pos[2]--(math.random()-0.5)*2 * _bound_y 
@@ -387,13 +372,13 @@ function sample_obstacle_position()
                 obs_pos[2] = -_bound_y
             end
 
-            simSetObjectPosition(_obs_hds[i], -1, obs_pos)
+            simSetObjectPosition(_obs_hds[index], -1, obs_pos)
             visable_count = visable_count + 1
         else 
-            local obs_pos = simGetObjectPosition(_obs_hds[i], -1)
+            local obs_pos = simGetObjectPosition(_obs_hds[index], -1)
             obs_pos[1] = _bound_x*5
             obs_pos[2] = _bound_y*5  
-            simSetObjectPosition(_obs_hds[i], -1, obs_pos)
+            simSetObjectPosition(_obs_hds[index], -1, obs_pos)
         end 
     end
 end
@@ -404,13 +389,13 @@ function sample_new_ep()
 
     local robot_pos = {}
     robot_pos[1] = 0 --(math.random() - 0.5) * 2 * 0.5
-    robot_pos[2] = -0.7 --(math.random() - 0.5) * 2 * 0.5
+    robot_pos[2] = -0.5 --(math.random() - 1) * 0.5
     robot_pos[3] = _start_pos[3]
 
     local robot_ori = {}
     robot_ori[1] = _start_ori[1] 
     robot_ori[2] = _start_ori[2]
-    robot_ori[3] = (math.random() - 0.5) *2 * math.pi
+    robot_ori[3] = _start_ori[3] --(math.random() - 0.5) *2 * math.pi
 
     local target_pos = {}
     target_pos[1] = 0 --(math.random() - 0.5) *2 + robot_pos[1] --* 2 * 0.5
@@ -436,11 +421,19 @@ function sample_new_ep()
     set_joint_values(_joint_hds, _start_joint_values)
 
     -- ep type
-    if math.random() < 0.8 then 
+    if math.random() < 1 then 
         local obs_pos = {}
-        local obs_index = math.random(#_obs_hds)
+        if global_counter == 1 then 
+            obs_index = 2
+        else 
+            obs_index = 4
+            global_counter = 0
+        end
+        -- local obs_index = math.random(#_obs_hds)
+        
+        print(obs_index, global_counter, #_obs_hds)
         local obs_pos_before =  simGetObjectPosition(_obs_hds[obs_index], -1)
-        obs_pos[1] = 0 --(math.random() - 0.5)*2 * 0.3 + (robot_pos[1] + target_pos[1])/2
+        obs_pos[1] = (math.random() - 0.5)*2 * 0.05
         obs_pos[2] = 0 --(math.random() - 0.5)*2 * 0.3 + (robot_pos[2] + target_pos[2])/2
         obs_pos[3] = obs_pos_before[3]
         simSetObjectPosition(_obs_hds[obs_index], -1, obs_pos)
@@ -640,13 +633,13 @@ function restore_ep(ep, modifly)
             robot_pos[1] = (math.random() - 0.5) *2 * shift + robot_pos[1]
             robot_pos[2] = (math.random() - 0.5) *2 * shift + robot_pos[2]
         elseif modifly_tpye == 3 then    
-            robot_pos[1] = (math.random() - 0.5) *2 * 0.6
-            robot_pos[2] = (math.random() - 0.5) *2 * 0.6            
+            robot_pos[1] = (math.random() - 0.5) *2 * 0.7
+            robot_pos[2] = (math.random() - 0.5) *2 * 0.3            
         else 
             robot_pos[1] = (math.random() - 0.5) *2 * shift + target_pos[1]
             robot_pos[2] = (math.random() - 0.5) *2 * shift + target_pos[2]
         end 
-        robot_ori[3] = (math.random() - 0.5) *2 * math.pi
+        -- robot_ori[3] = (math.random() - 0.5) *2 * math.pi
     end 
     simSetObjectPosition(robot_hd, -1, robot_pos)
     simSetObjectOrientation(robot_hd, -1, robot_ori)
@@ -671,8 +664,6 @@ end
 
 
 function sample_ep_fixenv(radius, reset_mode)
-    global_counter = global_counter + 1
-
     local restore_or_new = math.random()
     local modifly = math.random()
 
@@ -725,8 +716,6 @@ function sample_ep_fixenv(radius, reset_mode)
 end
 
 function sample_ep(radius, reset_mode)  -- sample small training case: robot in the middle, target locate between 0 to 1
-    global_counter = global_counter + 1
-
     local sample_type = math.random()
     if reset_mode == 3 then
         restore_ep(_current_ep, 0) 
