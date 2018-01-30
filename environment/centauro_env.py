@@ -232,7 +232,7 @@ class Simu_env():
         dist = robot_state[0]
         target_reward = -(dist - self.dist_pre) *5
         if target_reward <= 0:
-            target_reward = REWARD_CRASH   
+            target_reward = -1  
         # else:
         #     target_reward = target_reward * (1 - abs(robot_state[1]))
 
@@ -256,16 +256,17 @@ class Simu_env():
 
         if found_pose == bytearray(b"a"):       # when collision or no pose can be found
             # is_finish = True
-            reward_short = -1
-            reward_long += REWARD_CRASH
+            # reward_short = -1
+            reward_long = REWARD_CRASH
             # print('crash a')
             # reward = reward*10       
             info = 'crash'
 
         if found_pose == bytearray(b"c"):       # when collision or no pose can be found
             # is_finish = True
-            reward_short = -1
-            reward_long += REWARD_CRASH
+            # reward_short = -1
+            reward_long = REWARD_CRASH
+            target_reward = 0
             # print('crash')
             # reward = reward * 10
             info = 'crash'
@@ -276,13 +277,14 @@ class Simu_env():
         if dist < 0.2 and info != 'crash': # and diff_l < 0.02:
         # if robot_state[2] > 0.2 and info != 'crash':
             is_finish = True
-            reward_long = 0
+            reward_long = REWARD_GOAL
             info = 'goal'
 
         if abs(robot_state[1]) > 1 or abs(robot_state[2]) > 0.6: # out of boundary
             is_finish = True
-            reward_short = 0
-            reward_long += REWARD_CRASH * 20
+            reward_short = -2
+            reward_long = REWARD_CRASH
+            target_reward = 0
             info = 'out'
             # print('outof bound', robot_state[1])
 

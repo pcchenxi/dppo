@@ -13,18 +13,18 @@ import time
 import matplotlib.pyplot as plt
 
 EP_MAX = 500000
-EP_LEN = 50
-N_WORKER = 4               # parallel workers
+EP_LEN = 150
+N_WORKER = 1               # parallel workers
 GAMMA = 0.95                # reward discount factor
 LAM = 0.98
 A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0001               # learning rate for critic
-LR = 0.0005
+LR = 0.0001
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 2048
-MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
+BATCH_SIZE = 20480
+MIN_BATCH_SIZE = 256       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
@@ -100,7 +100,7 @@ class PPO(object):
         self.ratio = ratio
         self.grad_norm = _grad_norm
 
-        # self.load_model()   
+        self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')
@@ -533,7 +533,7 @@ class Worker(object):
         g_max = 20
 
         # self.env.save_ep()
-        self.test_model(5)
+        # self.test_model(5)
         # for _ in range(2):
         #     s = self.env.reset( 0, 0, 1)
         #     self.env.save_ep()
@@ -560,7 +560,7 @@ class Worker(object):
                     buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
                     # if update_counter%1 == 0:
                         # self.env.clear_history()
-                    self.test_model(5)
+                    # self.test_model(5)
                         # s = self.env.reset( 0, 0, 1)
                         # self.env.save_ep()
                     # self.env.clear_history_leave_one()

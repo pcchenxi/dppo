@@ -19,7 +19,7 @@ _init_target_dist = 0.2
 _target_dist = _init_target_dist
 
 _new_ep_prob = 0
-_modifly_prob = 0.7
+_modifly_prob = 0.6
 
 function start()
     -- sleep (3)
@@ -336,7 +336,7 @@ end
 
 function sample_obstacle_position()
     local visable_count = 0
-    local max_count = math.random(3)
+    local max_count = math.random(4)
     print(max_count)
     local start = math.random(#_obs_hds)
     for i=start, start + #_obs_hds, 1 do
@@ -348,13 +348,13 @@ function sample_obstacle_position()
             if _obs_mode == 'random' then      
                 -- obs_pos[1] = (math.random()-0.5)*2 * 0.5
                 local side = math.random()
-                obs_pos[1] = (math.random()-0.5)*2 * 0.25
+                obs_pos[1] = (math.random()-0.5)*2 * 0.8
                 obs_pos[2] = 0 --(math.random()-0.5)*2 * 1       
-                if side < 0.5 then 
-                    obs_pos[1] = obs_pos[1] - 0.5
-                else
-                    obs_pos[1] = obs_pos[1] + 0.5
-                end
+                -- if side < 0.5 then 
+                --     obs_pos[1] = obs_pos[1] - 0.6
+                -- else
+                --     obs_pos[1] = obs_pos[1] + 0.6
+                -- end
             else 
                 obs_pos[1] = (math.random()-0.5)*2 * 0.05 + obs_pos[1]--(math.random()-0.5)*2 * _bound_x 
                 obs_pos[2] = 0 --(math.random()-0.5)*2 * 0.05 + obs_pos[2]--(math.random()-0.5)*2 * _bound_y 
@@ -389,7 +389,7 @@ function sample_new_ep()
 
     local robot_pos = {}
     robot_pos[1] = 0 --(math.random() - 0.5) * 2 * 0.5
-    robot_pos[2] = -0.5 --(math.random() - 1) * 0.5
+    robot_pos[2] = -0.4 --(math.random() - 1) * 0.5
     robot_pos[3] = _start_pos[3]
 
     local robot_ori = {}
@@ -398,8 +398,8 @@ function sample_new_ep()
     robot_ori[3] = _start_ori[3] --(math.random() - 0.5) *2 * math.pi
 
     local target_pos = {}
-    target_pos[1] = 0 --(math.random() - 0.5) *2 + robot_pos[1] --* 2 * 0.5
-    target_pos[2] = 0.7 --math.random() * _target_dist --* global_counter/20000
+    target_pos[1] = (math.random() - 0.5) *2 * 0.7
+    target_pos[2] = 0.5 --math.random() * _target_dist --* global_counter/20000
     target_pos[3] = _start_t_pos[3] --(math.random() - 0.5) * 2 * 0.1 + 0.4
 
     local target_ori = {}
@@ -422,21 +422,25 @@ function sample_new_ep()
 
     -- ep type
     if math.random() < 1 then 
+        local skip = 0
         local obs_pos = {}
         if global_counter == 1 then 
             obs_index = 2
-        else 
+        elseif global_counter == 2 then  
             obs_index = 4
+        else 
             global_counter = 0
+            skip = 1
         end
-        -- local obs_index = math.random(#_obs_hds)
-        
-        print(obs_index, global_counter, #_obs_hds)
-        local obs_pos_before =  simGetObjectPosition(_obs_hds[obs_index], -1)
-        obs_pos[1] = (math.random() - 0.5)*2 * 0.05
-        obs_pos[2] = 0 --(math.random() - 0.5)*2 * 0.3 + (robot_pos[2] + target_pos[2])/2
-        obs_pos[3] = obs_pos_before[3]
-        simSetObjectPosition(_obs_hds[obs_index], -1, obs_pos)
+        -- -- local obs_index = math.random(#_obs_hds)
+        -- if skip == 0 then 
+        --     print(obs_index, global_counter, #_obs_hds)
+        --     local obs_pos_before =  simGetObjectPosition(_obs_hds[obs_index], -1)
+        --     obs_pos[1] = (math.random() - 0.5)*2 * 0.03
+        --     obs_pos[2] = 0 --(math.random() - 0.5)*2 * 0.3 + (robot_pos[2] + target_pos[2])/2
+        --     obs_pos[3] = obs_pos_before[3]
+        --     simSetObjectPosition(_obs_hds[obs_index], -1, obs_pos)
+        -- end
     end
 
     -- print (res_robot, res_target)
@@ -633,8 +637,8 @@ function restore_ep(ep, modifly)
             robot_pos[1] = (math.random() - 0.5) *2 * shift + robot_pos[1]
             robot_pos[2] = (math.random() - 0.5) *2 * shift + robot_pos[2]
         elseif modifly_tpye == 3 then    
-            robot_pos[1] = (math.random() - 0.5) *2 * 0.7
-            robot_pos[2] = (math.random() - 0.5) *2 * 0.3            
+            robot_pos[1] = (math.random() - 0.5) *2 * 0.4
+            robot_pos[2] = (math.random() - 0.5) *2 * 0.4            
         else 
             robot_pos[1] = (math.random() - 0.5) *2 * shift + target_pos[1]
             robot_pos[2] = (math.random() - 0.5) *2 * shift + target_pos[2]
