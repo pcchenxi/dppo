@@ -8,12 +8,11 @@ import matplotlib.pyplot as plt
 import gym, threading, queue
 from environment import centauro_env
 import scipy.signal
-import math
-import time
+import cv2, math, time
 import matplotlib.pyplot as plt
 
 EP_MAX = 500000
-EP_LEN = 150
+EP_LEN = 30
 N_WORKER = 1               # parallel workers
 GAMMA = 0.95                # reward discount factor
 LAM = 0.98
@@ -100,7 +99,7 @@ class PPO(object):
         self.ratio = ratio
         self.grad_norm = _grad_norm
 
-        self.load_model()   
+        # self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')
@@ -363,53 +362,61 @@ class Worker(object):
         self.env = VecNormalize(self.env)
         self.ppo = GLOBAL_PPO
 
-    def process_demo_path(self, demo_a, start_ob):
-        buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred = [], [], [], [], []
-        s = start_ob
-        for i in range(len(demo_a)-1, -1, -1):
-            a = demo_a[i]
-            full_a = self.env.action_list[a]
-            full_a = -np.array(full_a)
-            for index in range(len(self.env.action_list)):
-                env_action = np.array(self.env.action_list[index])
-                if np.array_equal(env_action, full_a):
-                    a = index 
-                    break
-            # print('reversed action', full_a, a)
-            # for continues action
-            # a = -a
+    def get_transfered_pose(self, current_pose, next_pose):
+        x_diff = next_pose[0] - current_pose[0]
+        y_diff = next_pose[1] - current_pose[1]
+        theta = -current_pose[2]
 
-            s_, r, event_r, done, info = self.env.step(a)
-            vpred_s, vpred_l = self.ppo.get_v(s)
+        x = math.cos(theta)*x_diff - math.sin(theta)*y_diff + centauro_env.map_shift
+        y = math.sin(theta)*x_diff + math.cos(theta)*y_diff + centauro_env.map_shift
 
-            buffer_s.append(s*1)
-            buffer_a.append(a)
-            buffer_r.append(r)                    # normalize reward, find to be useful
-            buffer_er.append(event_r)
-            buffer_vpred.append(vpred)
+        col = centauro_env.map_pixel - y/centauro_env.grid_size
+        row = centauro_env.map_pixel - x/centauro_env.grid_size
 
-            s = s_
+        return int(row), int(col)
 
-            if info != 'goal':
-                # self.env.save_ep()
-                dd = 1
-            else:
-                break 
+    def get_pose_mask(self, pose_list):
+        pose_mask = np.zeros((centauro_env.map_pixel, centauro_env.map_pixel), np.float32)
 
-        return buffer_s, buffer_a, buffer_r, buffer_er, buffer_vpred, s_
+        radius = int(0.35/centauro_env.grid_size)
+        for i in range(len(pose_list)):
+            row, col = self.get_transfered_pose(pose_list[0], pose_list[i])
+            if col > 0 and col < centauro_env.map_pixel and row > 0 and row < centauro_env.map_pixel:
+                cv2.circle(pose_mask, (col,row), radius, 1, -1)
+        return pose_mask
 
-    def filter_crash(self, buffer_s, buffer_a, buffer_r, buffer_vpred, buffer_info):
-        s, a, r, vpred, info = [], [], [], [], []
-        for i in range(len(buffer_r)):
-            if buffer_info[i] != 'crash':
-                s.append(buffer_s[i])
-                a.append(buffer_a[i])
-                r.append(buffer_r[i])
-                vpred.append(buffer_vpred[i])
-                info.append(buffer_info[i])
+    def modifly_state(self, pose_list, s):
+        pose_mask = self.get_pose_mask(pose_list)
+        img = s[:-4].reshape(centauro_env.map_pixel, centauro_env.map_pixel)
 
-        vpred.append(buffer_vpred[-1])
-        return s, a, r, vpred, info
+        obs_num = np.random.randint(0, 5)
+        obs_index = np.random.choice(3, obs_num)
+        obs_x = np.random.choice(8, obs_num, replace=False) * 0.25 - 1
+
+        heights_list = [0.2, 0.5, 1]
+        radius_list = [0.27, 0.1, 0.18]
+
+        for i in range(len(obs_index)):
+            index = obs_index[i]
+            ox = obs_x[i]
+            h = heights_list[index]
+            r = int(radius_list[index]/centauro_env.grid_size )
+            row, col = self.get_transfered_pose(pose_list[0], [ox, 0])
+            # check pose mask
+            if col > 0 and col < centauro_env.map_pixel and row > 0 and row < centauro_env.map_pixel:
+                mask_v = pose_mask[col, row]
+                if mask_v == 0:
+                    cv2.circle(img, (col, row), r, h, -1)
+
+        new_img = img.flatten()
+        s_new = s*1
+        s_new[:-4] = new_img
+
+        plt.clf()
+        plt.imshow(img)
+        plt.pause(0.01)
+
+        return s_new
 
     def compute_adv_return(self, buffer_reward, buffer_vpred, buffer_info, mode='long'):
         lastgaelam = 0.0
@@ -527,11 +534,6 @@ class Worker(object):
             , Crash_states, Crash_count, Crash_return, Crash_buffer_full \
             , History_states, History_count, History_adv, History_return, History_buffer_full
 
-        # reply buffer:
-        g_s, g_a, g_rs, g_rl, g_info, g_s_, g_end = [], [], [], [], [], [], []
-        g_index = 0
-        g_max = 20
-
         # self.env.save_ep()
         # self.test_model(5)
         # for _ in range(2):
@@ -561,18 +563,7 @@ class Worker(object):
                     # if update_counter%1 == 0:
                         # self.env.clear_history()
                     # self.test_model(5)
-                        # s = self.env.reset( 0, 0, 1)
-                        # self.env.save_ep()
-                    # self.env.clear_history_leave_one()
-                    print(len(g_a))
                     update_counter += 1
-
-                    # if len(g_a) > 0:
-                    #     num = int(len(g_a)/2 + 1)
-                    #     for _ in range(num):
-                    #         index = np.random.randint(len(g_a))
-                    #         self.process_and_send(g_s[index], g_a[index], g_rs[index], g_rl[index], g_info[index], g_s_[index])
-                    # break
 
                 a = self.ppo.choose_action(s, False)
                 # self.ppo.get_action_prob(s)
@@ -615,31 +606,8 @@ class Worker(object):
 
                 if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE or t == ep_length-1 or done:
                 # if (GLOBAL_EP != 0 and GLOBAL_EP%EP_BATCH_SIZE == 0) or t == ep_length-1 or done:
-                    
-                    if info == 'goal' and len(buffer_a) > 5:
-                        if len(g_a) < g_max:
-                            g_s.append(buffer_s)
-                            g_a.append(buffer_a)
-                            g_rs.append(buffer_rs)
-                            g_rl.append(buffer_rl)
-                            g_info.append(buffer_info)
-                            g_s_.append(s_)
-                            g_end.append(self.env.return_end)
-                        else:
-                            index = g_index % len(g_a)
-                            g_s[index] = buffer_s
-                            g_a[index] = buffer_a
-                            g_rs[index] = buffer_rs
-                            g_rl[index] = buffer_rl
-                            g_info[index] = buffer_info
-                            g_s_[index] = s_
-                            g_end[index] = self.env.return_end
-                            g_index += 1 
 
-                    # if len(g_a) > 0 and np.random.rand() > 0.7:
-                    #     index = np.random.randint(len(g_a))
-                    #     self.process_and_send(g_s[index], g_a[index], g_rs[index], g_rl[index], g_info[index], g_s_[index], g_end[index])
-
+                    s_modf = self.modifly_state(self.env.robot_pose_list[0:], buffer_s[0])
                     self.process_and_send(buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_info, s_, self.env.return_end)
 
                     buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []

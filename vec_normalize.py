@@ -75,6 +75,10 @@ class VecNormalize(object):
         return self.venv.return_end
 
     @property
+    def robot_pose_list(self):
+        return self.venv.robot_pose_list
+
+    @property
     def observation_space(self):
         return self._observation_space
     def close(self):

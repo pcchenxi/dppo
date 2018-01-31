@@ -36,7 +36,7 @@ for x in range(-1, 2):
 
 observation_range = 1.5
 
-map_size = 1.2
+map_size = 2
 map_shift = map_size/2
 grid_size = 0.04
 map_pixel = int(map_size/grid_size)
@@ -64,7 +64,7 @@ class Simu_env():
         self.dist_pre = 0
         self.min_obsdist_pre = 0.2
         self.obs_dist_pre = 0
-        self.state_pre = []
+        self.robot_pose_list = []
         self.ep_step = 0
         self.total_ep_reward = REWARD_GOAL
         self.goal_reached = False
@@ -136,7 +136,7 @@ class Simu_env():
         self.min_obsdist_pre = 0.2
         self.obs_dist_pre = 0
         self.ep_step = 0
-        self.state_pre = []
+        self.robot_pose_list = []
         # target_dist = 0.15+0.4*self.ep_count/3000
         target_dist = 1.5
         self.goal_path = False
@@ -172,6 +172,7 @@ class Simu_env():
             if action_space != 5:
                 action = a 
 
+        # action = [1, 0, 0, 0, 0, 0]
         _, _, _, _, found_pose = self.call_sim_function('centauro', 'step', action)
 
         robot_state = []
@@ -207,6 +208,10 @@ class Simu_env():
         reward_short = 0 #REWARD_GOAL/2 #REWARD_CRASH/(self.max_length*2)
         reward_long = 0
 
+        # save robot global pose
+        g_pose = self.get_robot_gpose()
+        self.robot_pose_list.append(g_pose)
+
         # weight_sum = 1
         # if action[0] == 0 and action[1] == 0:
         #     reward_short = 0
@@ -238,7 +243,6 @@ class Simu_env():
 
         self.dist_pre = dist
         self.min_obsdist_pre = min_dist
-        self.state_pre = robot_state
 
         #compute clearance
         obs_count = 0
@@ -288,46 +292,6 @@ class Simu_env():
             info = 'out'
             # print('outof bound', robot_state[1])
 
-        # if obs_count == 0:
-        #     if self.goal_path == False and info != 'crash' and info != 'goal':
-        #         reward_long = 0.5*REWARD_GOAL
-        #         self.goal_path = True
-        #         info = 'on_goal_path'
-        #         # print('on goal')
-        # else:
-        #     if self.goal_path == True and info != 'crash' and info != 'goal':
-        #         reward_long = -0.5*REWARD_GOAL
-        #         self.goal_path = False
-        #         info = 'off_goal_path'
-        #         # print('off goal')
-        #         # info = 'off_goal_path'
-        #     # print('goal')
-
-        # if info == 'goal':
-        #     self.goal_counter += 1
-        #     if self.goal_counter == 10:
-        #         is_finish = True 
-        # else:
-        #     self.goal_counter = 0
-
-        # if target_reward < 0:
-        #     target_reward = -1/(dist+1)*REWARD_GOAL
-        # else:
-        #     target_reward = 1/(dist+1)*REWARD_GOAL
-                
-        # reward_short += target_reward
-
-        # reward = event_reward + REWARD_STEP + target_reward
-        # print(reward, min_dist)
-        # if obs_count == 0:
-        #     reward_long += target_reward
-        # if info != 'crash':
-        #     reward_short = reward_short/np.sum(weight_sum)
-
-        # if obs_count == 0 and info != 'crash' and info != 'crash_a' and target_reward < 0:
-        #     reward_short = REWARD_CRASH
-        #     info = 'crash_a'
-
         reward_long += target_reward + REWARD_STEP
         # reward_short += off_pose
         return reward_short, reward_long, obs_count, is_finish, info
@@ -337,6 +301,10 @@ class Simu_env():
         self.call_sim_function('centauro', 'save_ep')
     def save_start_end_ep(self):
         self.call_sim_function('centauro', 'save_start_end_ep')
+
+    def get_robot_gpose(self):
+        _, _, g_pose, _, _  = self.call_sim_function('centauro', 'get_robot_gpose')
+        return g_pose
 
     def clear_history(self):
         self.call_sim_function('centauro', 'clear_history')
@@ -425,7 +393,7 @@ class Simu_env():
                 r = obstacle_info[i+2]
                 h = obstacle_info[i+4]
                 col = map_pixel - int(y/grid_size)
-                row = int(x/grid_size)
+                row = map_pixel - int(x/grid_size)
                 radius = int(r/grid_size )
                 height = (h)/(0.5)  #255.0/0.5 * h 
                 cv2.circle(terrain_map_o, (col,row), radius, height, -1)

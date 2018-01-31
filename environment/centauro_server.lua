@@ -19,7 +19,7 @@ _init_target_dist = 0.2
 _target_dist = _init_target_dist
 
 _new_ep_prob = 0
-_modifly_prob = 0.6
+_modifly_prob = 0
 
 function start()
     -- sleep (3)
@@ -145,6 +145,17 @@ function step(inInts,inFloats,inStrings,inBuffer)
     _current_ep = convert_current_ep()
     _current_tra[#_current_tra+1] = _current_ep
     return {}, {}, {}, res
+end
+
+function get_robot_gpose(inInts,inFloats,inStrings,inBuffer)
+    local g_pose = {}
+    local pos = simGetObjectPosition(_robot_hd, -1)
+    local ori = simGetObjectOrientation(_robot_hd, -1)
+
+    g_pose[1] = pos[1]
+    g_pose[2] = pos[2]
+    g_pose[3] = ori[3]
+    return {}, g_pose, {}, ''
 end
 
 function clear_history(inInts,inFloats,inStrings,inBuffer)
