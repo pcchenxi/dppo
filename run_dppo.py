@@ -12,18 +12,18 @@ import cv2, math, time
 import matplotlib.pyplot as plt
 
 EP_MAX = 500000
-EP_LEN = 30
-N_WORKER = 1               # parallel workers
+EP_LEN = 100
+N_WORKER = 4               # parallel workers
 GAMMA = 0.95                # reward discount factor
-LAM = 0.98
+LAM = 1
 A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0001               # learning rate for critic
-LR = 0.0001
+LR = 0.0005
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 20480
-MIN_BATCH_SIZE = 256       # minimum batch size for updating PPO
+BATCH_SIZE = 256
+MIN_BATCH_SIZE = 128       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
@@ -213,9 +213,14 @@ class PPO(object):
         return prob
 
     def get_v(self, s):
+        s_ndim = s.ndim
         if s.ndim < 2: s = s[np.newaxis, :]
         vs, vl = self.sess.run([self.vs, self.vl], {self.tfs: s, self.tf_is_train: False})
-        return 0, vl
+
+        if s_ndim < 2:
+            return vs[0], vl[0]
+        else:
+            return vs, vl
 
     def check_overall_loss(self, s, a, rs, rl, adv):
         feed_dict = {
@@ -378,18 +383,17 @@ class Worker(object):
     def get_pose_mask(self, pose_list):
         pose_mask = np.zeros((centauro_env.map_pixel, centauro_env.map_pixel), np.float32)
 
-        radius = int(0.35/centauro_env.grid_size)
+        radius = int(0.5/centauro_env.grid_size)
         for i in range(len(pose_list)):
             row, col = self.get_transfered_pose(pose_list[0], pose_list[i])
             if col > 0 and col < centauro_env.map_pixel and row > 0 and row < centauro_env.map_pixel:
                 cv2.circle(pose_mask, (col,row), radius, 1, -1)
         return pose_mask
 
-    def modifly_state(self, pose_list, s):
-        pose_mask = self.get_pose_mask(pose_list)
+    def modifly_state(self, pose_mask, pose_list, s):
+        success = False
         img = s[:-4].reshape(centauro_env.map_pixel, centauro_env.map_pixel)
-
-        obs_num = np.random.randint(0, 5)
+        obs_num = np.random.randint(4)
         obs_index = np.random.choice(3, obs_num)
         obs_x = np.random.choice(8, obs_num, replace=False) * 0.25 - 1
 
@@ -407,16 +411,38 @@ class Worker(object):
                 mask_v = pose_mask[col, row]
                 if mask_v == 0:
                     cv2.circle(img, (col, row), r, h, -1)
+                    success = True
 
         new_img = img.flatten()
-        s_new = s*1
+        s_new = s
         s_new[:-4] = new_img
 
-        plt.clf()
-        plt.imshow(img)
-        plt.pause(0.01)
+        # plt.clf()
+        # plt.imshow(img)
+        # plt.pause(0.01)
 
-        return s_new
+        return s_new, success
+
+    def get_aurgm_batch(self, iteration, s, a, ret_s, ret_l, info):
+        aurg_s, aurg_a, aurg_ret_s, aurg_ret_l, aurg_adv_s, aurg_adv_l, aurg_info = [], [], [], [], [], [], []
+
+        for i in range(len(s)-2):
+            pose_mask = self.get_pose_mask(self.env.robot_pose_list[i:])
+            for _ in range(iteration):
+                s_modf, success = self.modifly_state(pose_mask, self.env.robot_pose_list[i:], s[i]*1)
+                if success:
+                    aurg_s.append(s_modf)
+                    aurg_a.append(a[i])
+                    aurg_ret_s.append(ret_s[i])
+                    aurg_ret_l.append(ret_l[i])
+                    aurg_info.append(info[i])
+
+        aurg_vpred_s, aurg_vpred_l = self.ppo.get_v(np.asarray(aurg_s))
+        aurg_adv_s = aurg_ret_s - aurg_vpred_s
+        aurg_adv_l = aurg_ret_l - aurg_vpred_l
+
+        # print(len(aurg_s[0]), len(aurg_a), len(aurg_ret_l), len(aurg_ret_s), len(aurg_adv_l), len(aurg_adv_s), len(aurg_info))
+        return aurg_s, aurg_a, aurg_ret_s, aurg_ret_l, aurg_adv_s, aurg_adv_l, aurg_info
 
     def compute_adv_return(self, buffer_reward, buffer_vpred, buffer_info, mode='long'):
         lastgaelam = 0.0
@@ -501,8 +527,8 @@ class Worker(object):
                 info_num.append(-1)
             else:
                 info_num.append(0)
-        bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return_s)[:, np.newaxis], np.array(buffer_return_l)[:, np.newaxis], np.array(buffer_adv_s)[:, np.newaxis], np.array(buffer_adv_l)[:, np.newaxis], np.vstack(info_num)     
-        QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
+        
+        return buffer_return_s, buffer_return_l, buffer_adv_s, buffer_adv_l, info_num
 
     def test_model(self, ep_num):
         goal_num = 0
@@ -607,8 +633,17 @@ class Worker(object):
                 if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE or t == ep_length-1 or done:
                 # if (GLOBAL_EP != 0 and GLOBAL_EP%EP_BATCH_SIZE == 0) or t == ep_length-1 or done:
 
-                    s_modf = self.modifly_state(self.env.robot_pose_list[0:], buffer_s[0])
-                    self.process_and_send(buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_info, s_, self.env.return_end)
+                    buffer_return_s, buffer_return_l, buffer_adv_s, buffer_adv_l, info_num = self.process_and_send(buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_info, s_, self.env.return_end)
+                    bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return_s)[:, np.newaxis], np.array(buffer_return_l)[:, np.newaxis], np.array(buffer_adv_s)[:, np.newaxis], np.array(buffer_adv_l)[:, np.newaxis], np.vstack(info_num)     
+                    QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
+
+                    if info == 'goal':
+                        aug_s, aug_a, aug_return_s, aug_return_l, aug_adv_s, aug_adv_l, info_num = self.get_aurgm_batch(5, buffer_s, buffer_a, buffer_return_s, buffer_return_l, info_num)
+                        if (len(aug_s)>2):
+                            bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(aug_s), np.vstack(aug_a), np.array(aug_return_s)[:, np.newaxis], np.array(aug_return_l)[:, np.newaxis], np.array(aug_adv_s)[:, np.newaxis], np.array(aug_adv_l)[:, np.newaxis], np.vstack(info_num)     
+                            QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
+                            GLOBAL_UPDATE_COUNTER += len(aug_a)
+                            print('generage new batch:', len(aug_a))
 
                     buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
                     if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE:

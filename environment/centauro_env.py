@@ -52,7 +52,7 @@ action_space = len(action_list)
 action_type = spaces.Discrete(action_space)
 
 REWARD_GOAL = 1
-REWARD_STEP =  -0.01
+REWARD_STEP =  0
 REWARD_CRASH = -0.05
 
 class Simu_env():
@@ -235,9 +235,9 @@ class Simu_env():
         # reward_short = reward_short * obs_reward
 
         dist = robot_state[0]
-        target_reward = -(dist - self.dist_pre) *5
+        target_reward = -(dist - self.dist_pre)
         if target_reward <= 0:
-            target_reward = -1  
+            target_reward = -0.1
         # else:
         #     target_reward = target_reward * (1 - abs(robot_state[1]))
 
@@ -284,7 +284,7 @@ class Simu_env():
             reward_long = REWARD_GOAL
             info = 'goal'
 
-        if abs(robot_state[1]) > 1 or abs(robot_state[2]) > 0.6: # out of boundary
+        if abs(robot_state[1]) > 1 or abs(robot_state[2]) > 0.6 or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
             is_finish = True
             reward_short = -2
             reward_long = REWARD_CRASH

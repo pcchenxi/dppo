@@ -347,8 +347,7 @@ end
 
 function sample_obstacle_position()
     local visable_count = 0
-    local max_count = math.random(4)
-    print(max_count)
+    local max_count = 0 --math.random(2)
     local start = math.random(#_obs_hds)
     for i=start, start + #_obs_hds, 1 do
         local visable = math.random()
@@ -359,7 +358,7 @@ function sample_obstacle_position()
             if _obs_mode == 'random' then      
                 -- obs_pos[1] = (math.random()-0.5)*2 * 0.5
                 local side = math.random()
-                obs_pos[1] = (math.random()-0.5)*2 * 0.8
+                obs_pos[1] = math.random(7) * 0.25 - 1  --(math.random()-0.5)*2 * 0.8
                 obs_pos[2] = 0 --(math.random()-0.5)*2 * 1       
                 -- if side < 0.5 then 
                 --     obs_pos[1] = obs_pos[1] - 0.6
@@ -443,15 +442,15 @@ function sample_new_ep()
             global_counter = 0
             skip = 1
         end
-        -- -- local obs_index = math.random(#_obs_hds)
-        -- if skip == 0 then 
-        --     print(obs_index, global_counter, #_obs_hds)
-        --     local obs_pos_before =  simGetObjectPosition(_obs_hds[obs_index], -1)
-        --     obs_pos[1] = (math.random() - 0.5)*2 * 0.03
-        --     obs_pos[2] = 0 --(math.random() - 0.5)*2 * 0.3 + (robot_pos[2] + target_pos[2])/2
-        --     obs_pos[3] = obs_pos_before[3]
-        --     simSetObjectPosition(_obs_hds[obs_index], -1, obs_pos)
-        -- end
+        -- local obs_index = math.random(#_obs_hds)
+        if skip == 0 then 
+            print(obs_index, global_counter, #_obs_hds)
+            local obs_pos_before =  simGetObjectPosition(_obs_hds[obs_index], -1)
+            obs_pos[1] = (math.random() - 0.5)*2 * 0.03
+            obs_pos[2] = 0 --(math.random() - 0.5)*2 * 0.3 + (robot_pos[2] + target_pos[2])/2
+            obs_pos[3] = obs_pos_before[3]
+            simSetObjectPosition(_obs_hds[obs_index], -1, obs_pos)
+        end
     end
 
     -- print (res_robot, res_target)
