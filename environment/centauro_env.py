@@ -36,9 +36,9 @@ for x in range(-1, 2):
 
 observation_range = 1.5
 
-map_size = 2
+map_size = 1.5
 map_shift = map_size/2
-grid_size = 0.04
+grid_size = 0.05
 map_pixel = int(map_size/grid_size)
 
 observation_pixel = int(observation_range/grid_size)
@@ -52,7 +52,7 @@ action_space = len(action_list)
 action_type = spaces.Discrete(action_space)
 
 REWARD_GOAL = 1
-REWARD_STEP =  0
+REWARD_STEP =  -0.01
 REWARD_CRASH = -0.05
 
 class Simu_env():
@@ -260,7 +260,7 @@ class Simu_env():
 
         if found_pose == bytearray(b"a"):       # when collision or no pose can be found
             # is_finish = True
-            # reward_short = -1
+            # reward_short = -0.5
             reward_long = REWARD_CRASH
             # print('crash a')
             # reward = reward*10       
@@ -268,7 +268,7 @@ class Simu_env():
 
         if found_pose == bytearray(b"c"):       # when collision or no pose can be found
             # is_finish = True
-            # reward_short = -1
+            # reward_short = -0.5
             reward_long = REWARD_CRASH
             target_reward = 0
             # print('crash')
@@ -284,10 +284,10 @@ class Simu_env():
             reward_long = REWARD_GOAL
             info = 'goal'
 
-        if abs(robot_state[1]) > 1 or abs(robot_state[2]) > 0.6 or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
+        if abs(robot_state[1]) > 1 or abs(robot_state[2]) > 0.6: # or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
             is_finish = True
-            reward_short = -2
-            reward_long = REWARD_CRASH
+            reward_short = -1
+            # reward_long = REWARD_CRASH
             target_reward = 0
             info = 'out'
             # print('outof bound', robot_state[1])

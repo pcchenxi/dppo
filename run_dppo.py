@@ -12,17 +12,17 @@ import cv2, math, time
 import matplotlib.pyplot as plt
 
 EP_MAX = 500000
-EP_LEN = 100
-N_WORKER = 4               # parallel workers
+EP_LEN = 50
+N_WORKER = 1               # parallel workers
 GAMMA = 0.95                # reward discount factor
 LAM = 1
 A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0001               # learning rate for critic
-LR = 0.0005
+LR = 0.00005
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 256
+BATCH_SIZE = 10240
 MIN_BATCH_SIZE = 128       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
@@ -99,7 +99,7 @@ class PPO(object):
         self.ratio = ratio
         self.grad_norm = _grad_norm
 
-        # self.load_model()   
+        self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')
@@ -258,20 +258,13 @@ class PPO(object):
             adv_s = (adv_s.flatten())
             adv_l = (adv_l.flatten())
 
-            adv = adv_l
+            adv = adv_l*1
 
-            # if adv_l.min() < 0:
-            #     adv_s_scale = adv_s * -adv_l.min()
-            # for i in range(len(adv_s)):
-            #     if adv_s[i] < -0.5 and adv_s_scale[i] < adv_l[i]:
-            #         adv[i] = adv_s_scale[i]
-            #     else:
-            #         adv[i] = adv_l[i]
+            adv_s_scale = adv_s * abs(adv.min())
 
-            # if abs(adv.max()) > abs(adv.min()):
-            #     adv = adv/abs(adv.max())
-            # else:
-            #     adv = adv/abs(adv.min())
+            for i in range(len(adv)):
+                if adv_s[i] < -0.49:
+                    adv[i] = (adv_s_scale[i] + adv[i])/2
 
             if adv.std() != 0:
                 adv = (adv - adv.mean())/adv.std()
@@ -383,7 +376,7 @@ class Worker(object):
     def get_pose_mask(self, pose_list):
         pose_mask = np.zeros((centauro_env.map_pixel, centauro_env.map_pixel), np.float32)
 
-        radius = int(0.5/centauro_env.grid_size)
+        radius = int(0.4/centauro_env.grid_size)
         for i in range(len(pose_list)):
             row, col = self.get_transfered_pose(pose_list[0], pose_list[i])
             if col > 0 and col < centauro_env.map_pixel and row > 0 and row < centauro_env.map_pixel:
@@ -396,6 +389,7 @@ class Worker(object):
         obs_num = np.random.randint(4)
         obs_index = np.random.choice(3, obs_num)
         obs_x = np.random.choice(8, obs_num, replace=False) * 0.25 - 1
+        obs_y = np.random.choice(8, obs_num, replace=False) * 0.25 - 1
 
         heights_list = [0.2, 0.5, 1]
         radius_list = [0.27, 0.1, 0.18]
@@ -403,9 +397,10 @@ class Worker(object):
         for i in range(len(obs_index)):
             index = obs_index[i]
             ox = obs_x[i]
+            oy = obs_y[i]
             h = heights_list[index]
             r = int(radius_list[index]/centauro_env.grid_size )
-            row, col = self.get_transfered_pose(pose_list[0], [ox, 0])
+            row, col = self.get_transfered_pose(pose_list[0], [ox, oy])
             # check pose mask
             if col > 0 and col < centauro_env.map_pixel and row > 0 and row < centauro_env.map_pixel:
                 mask_v = pose_mask[col, row]
@@ -417,9 +412,10 @@ class Worker(object):
         s_new = s
         s_new[:-4] = new_img
 
-        # plt.clf()
-        # plt.imshow(img)
-        # plt.pause(0.01)
+        # if success:
+        #     plt.clf()
+        #     plt.imshow(img)
+        #     plt.pause(0.0)
 
         return s_new, success
 
@@ -437,9 +433,10 @@ class Worker(object):
                     aurg_ret_l.append(ret_l[i])
                     aurg_info.append(info[i])
 
-        aurg_vpred_s, aurg_vpred_l = self.ppo.get_v(np.asarray(aurg_s))
-        aurg_adv_s = aurg_ret_s - aurg_vpred_s
-        aurg_adv_l = aurg_ret_l - aurg_vpred_l
+        if aurg_s != []:
+            aurg_vpred_s, aurg_vpred_l = self.ppo.get_v(np.asarray(aurg_s))
+            aurg_adv_s = aurg_ret_s - aurg_vpred_s
+            aurg_adv_l = aurg_ret_l - aurg_vpred_l
 
         # print(len(aurg_s[0]), len(aurg_a), len(aurg_ret_l), len(aurg_ret_s), len(aurg_adv_l), len(aurg_adv_s), len(aurg_info))
         return aurg_s, aurg_a, aurg_ret_s, aurg_ret_l, aurg_adv_s, aurg_adv_l, aurg_info
@@ -502,8 +499,10 @@ class Worker(object):
 
         buffer_adv_s = buffer_return_s*1
 
-        if buffer_adv_l.max() > 0:
-            buffer_adv_l = buffer_adv_s * buffer_adv_l.max() + buffer_adv_l
+        # if buffer_adv_l.max() > 0:
+        #     buffer_adv_l = buffer_adv_s * buffer_adv_l.max() + buffer_adv_l
+        # else:
+        #     buffer_adv_l = buffer_adv_s * abs(buffer_adv_l.min()) + buffer_adv_l
         
         # for i in range(len(buffer_adv_s)):
         #     if buffer_adv_s[i] > -0: # and buffer_adv_s[i] < 0.5:
@@ -588,7 +587,7 @@ class Worker(object):
                     buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
                     # if update_counter%1 == 0:
                         # self.env.clear_history()
-                    # self.test_model(5)
+                    self.test_model(5)
                     update_counter += 1
 
                 a = self.ppo.choose_action(s, False)
@@ -639,7 +638,7 @@ class Worker(object):
 
                     if info == 'goal':
                         aug_s, aug_a, aug_return_s, aug_return_l, aug_adv_s, aug_adv_l, info_num = self.get_aurgm_batch(5, buffer_s, buffer_a, buffer_return_s, buffer_return_l, info_num)
-                        if (len(aug_s)>2):
+                        if (aug_s != []):
                             bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(aug_s), np.vstack(aug_a), np.array(aug_return_s)[:, np.newaxis], np.array(aug_return_l)[:, np.newaxis], np.array(aug_adv_s)[:, np.newaxis], np.array(aug_adv_l)[:, np.newaxis], np.vstack(info_num)     
                             QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
                             GLOBAL_UPDATE_COUNTER += len(aug_a)

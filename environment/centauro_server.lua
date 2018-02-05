@@ -347,7 +347,7 @@ end
 
 function sample_obstacle_position()
     local visable_count = 0
-    local max_count = 0 --math.random(2)
+    local max_count = math.random(6)
     local start = math.random(#_obs_hds)
     for i=start, start + #_obs_hds, 1 do
         local visable = math.random()
@@ -359,7 +359,7 @@ function sample_obstacle_position()
                 -- obs_pos[1] = (math.random()-0.5)*2 * 0.5
                 local side = math.random()
                 obs_pos[1] = math.random(7) * 0.25 - 1  --(math.random()-0.5)*2 * 0.8
-                obs_pos[2] = 0 --(math.random()-0.5)*2 * 1       
+                obs_pos[2] = math.random(7) * 0.25 - 1 --(math.random()-0.5)*2 * 1       
                 -- if side < 0.5 then 
                 --     obs_pos[1] = obs_pos[1] - 0.6
                 -- else
@@ -397,6 +397,8 @@ function sample_new_ep()
 
     sample_obstacle_position()
 
+    local special = math.random()
+
     local robot_pos = {}
     robot_pos[1] = 0 --(math.random() - 0.5) * 2 * 0.5
     robot_pos[2] = -0.4 --(math.random() - 1) * 0.5
@@ -408,9 +410,14 @@ function sample_new_ep()
     robot_ori[3] = _start_ori[3] --(math.random() - 0.5) *2 * math.pi
 
     local target_pos = {}
-    target_pos[1] = (math.random() - 0.5) *2 * 0.7
-    target_pos[2] = 0.5 --math.random() * _target_dist --* global_counter/20000
+    target_pos[1] = (math.random() - 0.5) *2 * 0.4
+    target_pos[2] = math.random() * 0.35 + 0.25 --math.random() * _target_dist --* global_counter/20000
     target_pos[3] = _start_t_pos[3] --(math.random() - 0.5) * 2 * 0.1 + 0.4
+
+    if special > 0.2 then 
+        target_pos[1] = (math.random() - 0.5) *2 * 0.2
+        target_pos[2] = math.random() * 0.2 --math.random() * _target_dist --* global_counter/20000   
+    end
 
     local target_ori = {}
     target_ori[1] = _start_t_ori[1] 
@@ -431,13 +438,14 @@ function sample_new_ep()
     set_joint_values(_joint_hds, _start_joint_values)
 
     -- ep type
-    if math.random() < 1 then 
+    if special > 0.2 then 
         local skip = 0
         local obs_pos = {}
         if global_counter == 1 then 
             obs_index = 2
         elseif global_counter == 2 then  
             obs_index = 4
+            global_counter = 0
         else 
             global_counter = 0
             skip = 1
@@ -464,9 +472,9 @@ function check_collision(robot_pos, robot_ori, target_pos, target_ori)
     simSetObjectOrientation(_fake_robot_hd, -1, robot_ori)
     local res_robot = simCheckCollision(_fake_robot_hd, _collection_hd)
 
-    -- simSetObjectPosition(_fake_robot_hd,-1,target_pos)
-    -- simSetObjectOrientation(_fake_robot_hd, -1, target_ori)
-    -- local res_target = simCheckCollision(_fake_robot_hd, _collection_hd)
+    simSetObjectPosition(_fake_robot_hd,-1,target_pos)
+    simSetObjectOrientation(_fake_robot_hd, -1, target_ori)
+    local res_target = simCheckCollision(_fake_robot_hd, _collection_hd)
     return res_robot, res_target
 end
 
