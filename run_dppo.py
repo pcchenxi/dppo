@@ -12,7 +12,7 @@ import cv2, math, time
 import matplotlib.pyplot as plt
 
 EP_MAX = 500000
-EP_LEN = 50
+EP_LEN = 200
 N_WORKER = 4               # parallel workers
 GAMMA = 0.95                # reward discount factor
 LAM = 1
@@ -99,7 +99,7 @@ class PPO(object):
         self.ratio = ratio
         self.grad_norm = _grad_norm
 
-        self.load_model()   
+        # self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')

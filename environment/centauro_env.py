@@ -284,7 +284,7 @@ class Simu_env():
             reward_long = REWARD_GOAL
             info = 'goal'
 
-        if abs(robot_state[1]) > 0.1 or abs(robot_state[2]) > 0.8: # or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
+        if abs(robot_state[1]) > 1 or abs(robot_state[2]) > 0.8: # or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
         # if dist > 2:
             is_finish = True
             reward_short = -1
