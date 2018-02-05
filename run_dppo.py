@@ -13,16 +13,16 @@ import matplotlib.pyplot as plt
 
 EP_MAX = 500000
 EP_LEN = 50
-N_WORKER = 1               # parallel workers
+N_WORKER = 4               # parallel workers
 GAMMA = 0.95                # reward discount factor
 LAM = 1
 A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0001               # learning rate for critic
-LR = 0.00005
+LR = 0.0005
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 10240
+BATCH_SIZE = 5120
 MIN_BATCH_SIZE = 128       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
@@ -263,7 +263,7 @@ class PPO(object):
             adv_s_scale = adv_s * abs(adv.min())
 
             for i in range(len(adv)):
-                if adv_s[i] < -0.49:
+                if adv_s[i] < -0.5:
                     adv[i] = (adv_s_scale[i] + adv[i])/2
 
             if adv.std() != 0:
@@ -351,6 +351,9 @@ class PPO(object):
                 update_count = 1
                 s_all, a_all, rs_all, rl_all, adv_s_all, adv_l_all = [], [], [], [], [], []
                 print('reset')
+
+            if entropy < 1:         # stop training
+                COORD.request_stop()
 
 
 class Worker(object):
@@ -587,7 +590,7 @@ class Worker(object):
                     buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
                     # if update_counter%1 == 0:
                         # self.env.clear_history()
-                    self.test_model(5)
+                    # self.test_model(5)
                     update_counter += 1
 
                 a = self.ppo.choose_action(s, False)
@@ -636,13 +639,13 @@ class Worker(object):
                     bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return_s)[:, np.newaxis], np.array(buffer_return_l)[:, np.newaxis], np.array(buffer_adv_s)[:, np.newaxis], np.array(buffer_adv_l)[:, np.newaxis], np.vstack(info_num)     
                     QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
 
-                    if info == 'goal':
-                        aug_s, aug_a, aug_return_s, aug_return_l, aug_adv_s, aug_adv_l, info_num = self.get_aurgm_batch(5, buffer_s, buffer_a, buffer_return_s, buffer_return_l, info_num)
-                        if (aug_s != []):
-                            bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(aug_s), np.vstack(aug_a), np.array(aug_return_s)[:, np.newaxis], np.array(aug_return_l)[:, np.newaxis], np.array(aug_adv_s)[:, np.newaxis], np.array(aug_adv_l)[:, np.newaxis], np.vstack(info_num)     
-                            QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
-                            GLOBAL_UPDATE_COUNTER += len(aug_a)
-                            print('generage new batch:', len(aug_a))
+                    # if info == 'goal':
+                    #     aug_s, aug_a, aug_return_s, aug_return_l, aug_adv_s, aug_adv_l, info_num = self.get_aurgm_batch(5, buffer_s, buffer_a, buffer_return_s, buffer_return_l, info_num)
+                    #     if (aug_s != []):
+                    #         bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(aug_s), np.vstack(aug_a), np.array(aug_return_s)[:, np.newaxis], np.array(aug_return_l)[:, np.newaxis], np.array(aug_adv_s)[:, np.newaxis], np.array(aug_adv_l)[:, np.newaxis], np.vstack(info_num)     
+                    #         QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
+                    #         GLOBAL_UPDATE_COUNTER += len(aug_a)
+                    #         print('generage new batch:', len(aug_a))
 
                     buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
                     if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE:

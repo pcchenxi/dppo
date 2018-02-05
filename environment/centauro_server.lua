@@ -36,7 +36,7 @@ function start()
     _start_joint_values = get_joint_values(_joint_hds)
 
     _start_t_pos = simGetObjectPosition(_target_hd, -1)
-    _start_t_pos[3] = _start_t_pos[3] --+ 0.35
+    _start_t_pos[3] = _start_t_pos[3] + 0.35
     _start_t_ori = simGetObjectOrientation(_target_hd,-1)
     _start_l = get_current_l(_robot_hd)
 
@@ -347,7 +347,7 @@ end
 
 function sample_obstacle_position()
     local visable_count = 0
-    local max_count = math.random(6)
+    local max_count = 0 --math.random(6)
     local start = math.random(#_obs_hds)
     for i=start, start + #_obs_hds, 1 do
         local visable = math.random()
@@ -401,23 +401,23 @@ function sample_new_ep()
 
     local robot_pos = {}
     robot_pos[1] = 0 --(math.random() - 0.5) * 2 * 0.5
-    robot_pos[2] = -0.4 --(math.random() - 1) * 0.5
+    robot_pos[2] = -0.7 --(math.random() - 1) * 0.5
     robot_pos[3] = _start_pos[3]
 
     local robot_ori = {}
     robot_ori[1] = _start_ori[1] 
     robot_ori[2] = _start_ori[2]
-    robot_ori[3] = _start_ori[3] --(math.random() - 0.5) *2 * math.pi
+    robot_ori[3] = (math.random() - 0.5) *2 * math.pi
 
     local target_pos = {}
-    target_pos[1] = (math.random() - 0.5) *2 * 0.4
-    target_pos[2] = math.random() * 0.35 + 0.25 --math.random() * _target_dist --* global_counter/20000
+    target_pos[1] = 0 --(math.random() - 0.5) *2 * 0.4
+    target_pos[2] = math.random() * 0.5 --math.random() * _target_dist --* global_counter/20000
     target_pos[3] = _start_t_pos[3] --(math.random() - 0.5) * 2 * 0.1 + 0.4
 
-    if special > 0.2 then 
-        target_pos[1] = (math.random() - 0.5) *2 * 0.2
-        target_pos[2] = math.random() * 0.2 --math.random() * _target_dist --* global_counter/20000   
-    end
+    -- if special > 0.2 then 
+    --     target_pos[1] = (math.random() - 0.5) *2 * 0.2
+    --     target_pos[2] = math.random() * 0.2 --math.random() * _target_dist --* global_counter/20000   
+    -- end
 
     local target_ori = {}
     target_ori[1] = _start_t_ori[1] 
@@ -438,9 +438,10 @@ function sample_new_ep()
     set_joint_values(_joint_hds, _start_joint_values)
 
     -- ep type
-    if special > 0.2 then 
+    if special > 0 then 
         local skip = 0
         local obs_pos = {}
+        global_counter = 1
         if global_counter == 1 then 
             obs_index = 2
         elseif global_counter == 2 then  
@@ -454,7 +455,8 @@ function sample_new_ep()
         if skip == 0 then 
             print(obs_index, global_counter, #_obs_hds)
             local obs_pos_before =  simGetObjectPosition(_obs_hds[obs_index], -1)
-            obs_pos[1] = (math.random() - 0.5)*2 * 0.03
+            obs_pos[1] = (math.random() - 0.5)*2 * 0.05
+            -- obs_pos[1] = math.random(3) * 0.25 - 0.5
             obs_pos[2] = 0 --(math.random() - 0.5)*2 * 0.3 + (robot_pos[2] + target_pos[2])/2
             obs_pos[3] = obs_pos_before[3]
             simSetObjectPosition(_obs_hds[obs_index], -1, obs_pos)
