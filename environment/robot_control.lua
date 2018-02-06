@@ -8,11 +8,11 @@ require("get_set")
 -- action: vx, vy, vw, vl
 
 scale = 1
-step = 0.04 * scale
+step = 0.05 * scale
 dx = step * scale
 dy = step * scale
-dh = 0.05 * scale
-dl = 0.05 * scale
+dh = 0.02 * scale
+dl = 0.02 * scale
 dw = math.pi/180 * 5 * scale
 
 collision_hd_1 = simGetCollectionHandle('centauro')
