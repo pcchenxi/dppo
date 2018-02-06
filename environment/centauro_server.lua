@@ -401,17 +401,22 @@ function sample_new_ep()
 
     local robot_pos = {}
     robot_pos[1] = 0 --(math.random() - 0.5) * 2 * 0.5
-    robot_pos[2] = -0.7 --(math.random() - 1) * 0.5
+    robot_pos[2] = (math.random() - 1) * 0.6
     robot_pos[3] = _start_pos[3]
 
     local robot_ori = {}
     robot_ori[1] = _start_ori[1] 
     robot_ori[2] = _start_ori[2]
-    robot_ori[3] = (math.random() - 0.5) *2 * math.pi
+    robot_ori[3] = (math.random() - 0.5) *2 * math.pi -- _start_ori[3]
+    -- if math.random() > 0.5 then 
+    --     robot_ori[3] = _start_ori[3] --(math.random() - 0.5) * 2 * 0.1 + 0.4
+    -- else 
+    --     robot_ori[3] = -_start_ori[3]
+    -- end
 
     local target_pos = {}
     target_pos[1] = 0 --(math.random() - 0.5) *2 * 0.4
-    target_pos[2] = math.random() * 0.5 --math.random() * _target_dist --* global_counter/20000
+    target_pos[2] = math.random() * 0.2 --math.random() * _target_dist --* global_counter/20000
     target_pos[3] = _start_t_pos[3] --(math.random() - 0.5) * 2 * 0.1 + 0.4
 
     -- if special > 0.2 then 

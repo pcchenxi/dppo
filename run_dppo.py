@@ -12,9 +12,9 @@ import cv2, math, time
 import matplotlib.pyplot as plt
 
 EP_MAX = 500000
-EP_LEN = 200
+EP_LEN = 50
 N_WORKER = 4               # parallel workers
-GAMMA = 0.95                # reward discount factor
+GAMMA = 0.9                # reward discount factor
 LAM = 1
 A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0001               # learning rate for critic
@@ -22,7 +22,7 @@ LR = 0.0005
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 5120
+BATCH_SIZE = 2048
 MIN_BATCH_SIZE = 128       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
@@ -263,7 +263,7 @@ class PPO(object):
             adv_s_scale = adv_s * abs(adv.min())
 
             for i in range(len(adv)):
-                if adv_s[i] < -0.5:
+                if adv_s[i] < -0.9:
                     adv[i] = (adv_s_scale[i] + adv[i])/2
 
             if adv.std() != 0:
@@ -535,7 +535,7 @@ class Worker(object):
     def test_model(self, ep_num):
         goal_num = 0
         saved_ep = 0
-        max_step = EP_LEN
+        max_step = int(EP_LEN/3 * 2)
         print('searching for failed ep', ep_num) 
         for test_num in range(100):
             s = self.env.reset(0, 0, 1)
@@ -563,7 +563,7 @@ class Worker(object):
             , History_states, History_count, History_adv, History_return, History_buffer_full
 
         # self.env.save_ep()
-        # self.test_model(5)
+        self.test_model(5)
         # for _ in range(2):
         #     s = self.env.reset( 0, 0, 1)
         #     self.env.save_ep()
@@ -590,7 +590,7 @@ class Worker(object):
                     buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
                     # if update_counter%1 == 0:
                         # self.env.clear_history()
-                    # self.test_model(5)
+                    self.test_model(5)
                     update_counter += 1
 
                 a = self.ppo.choose_action(s, False)

@@ -38,7 +38,7 @@ observation_range = 1.5
 
 map_size = 1.5
 map_shift = map_size/2
-grid_size = 0.05
+grid_size = 0.03
 map_pixel = int(map_size/grid_size)
 
 observation_pixel = int(observation_range/grid_size)
@@ -51,7 +51,7 @@ action_space = len(action_list)
 # action_type = spaces.Box(-1, 1, shape = (action_space,))
 action_type = spaces.Discrete(action_space)
 
-REWARD_GOAL = 1
+REWARD_GOAL = 5
 REWARD_STEP =  -0.01
 REWARD_CRASH = -0.05
 
@@ -236,7 +236,7 @@ class Simu_env():
 
         dist = robot_state[0]
         target_reward = -(dist - self.dist_pre)
-        if target_reward < 0:
+        if target_reward <= 0:
             target_reward = -0.1
         # else:
         #     target_reward = target_reward * (1 - abs(robot_state[1]))
@@ -278,13 +278,13 @@ class Simu_env():
         # if np.count_nonzero(action) == 0:
             # event_reward = REWARD_CRASH
 
-        if dist < 0.2 and info != 'crash': # and diff_l < 0.02:
+        if dist < 0.1 and info != 'crash': # and diff_l < 0.02:
         # if robot_state[2] > 0.2 and info != 'crash':
             is_finish = True
             reward_long = REWARD_GOAL
             info = 'goal'
 
-        if abs(robot_state[1]) > 1 or abs(robot_state[2]) > 0.8: # or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
+        if abs(robot_state[1]) > 1 or abs(robot_state[2]) > 0.6: # or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
         # if dist > 2:
             is_finish = True
             reward_short = -1

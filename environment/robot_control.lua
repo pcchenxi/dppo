@@ -8,7 +8,7 @@ require("get_set")
 -- action: vx, vy, vw, vl
 
 scale = 1
-step = 0.08 * scale
+step = 0.04 * scale
 dx = step * scale
 dy = step * scale
 dh = 0.05 * scale
@@ -60,6 +60,7 @@ function do_action_rl(robot_hd, action)
     local current_joint_values = get_joint_values(_joint_hds)
     local leg_l = get_current_l(robot_hd)
 
+
     -- local diff_l = 1 - math.abs(leg_l - 0.13)/0.2
     -- local diff_h = 1 - math.abs(current_pos[3])/0.2
     -- local ratio = diff_l
@@ -89,14 +90,20 @@ function do_action_rl(robot_hd, action)
     simSetObjectPosition(robot_hd,robot_hd,sample_pose)
     simSetObjectOrientation(robot_hd,-1,sample_ori)
 
-    action[5] = leg_l + dl*action[5]
-    -- print(leg_l, action[5])
-    result = do_action(robot_hd, action)
+    local new_pos=simGetObjectPosition(robot_hd,-1)
+    if math.abs(new_pos[1]) > 0.1 then 
+        result = 'c'
+    else 
+        print('do action')
+        action[5] = leg_l + dl*action[5]
+        -- print(leg_l, action[5])
+        result = do_action(robot_hd, action)
 
-    -- local new_pos=simGetObjectPosition(robot_hd,-1)
-    -- if math.abs(new_pos[1])>0.5 or math.abs(new_pos[2])>0.5 then 
-    --     result = 'a'
-    -- end
+        -- local new_pos=simGetObjectPosition(robot_hd,-1)
+        -- if math.abs(new_pos[1])>0.5 or math.abs(new_pos[2])>0.5 then 
+        --     result = 'a'
+        -- end
+    end 
 
     if result ~= 't' then 
     -- if result == 'a' then
@@ -104,6 +111,7 @@ function do_action_rl(robot_hd, action)
         simSetObjectOrientation(robot_hd,-1,current_ori)
         set_joint_values(_joint_hds, current_joint_values)
     end
+
     return result
     -- return sample_pose, sample_ori
 end
