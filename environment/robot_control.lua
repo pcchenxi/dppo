@@ -91,10 +91,9 @@ function do_action_rl(robot_hd, action)
     simSetObjectOrientation(robot_hd,-1,sample_ori)
 
     local new_pos=simGetObjectPosition(robot_hd,-1)
-    if math.abs(new_pos[1]) > 0.1 then 
+    if math.abs(new_pos[1]) > 20 then 
         result = 'c'
     else 
-        print('do action')
         action[5] = leg_l + dl*action[5]
         -- print(leg_l, action[5])
         result = do_action(robot_hd, action)

@@ -282,7 +282,7 @@ class Simu_env():
 
         if dist < 0.1: # and info != 'crash': # and diff_l < 0.02:
         # if robot_state[2] > 0.2 and info != 'crash':
-            # is_finish = True
+            is_finish = True
             self.goal_counter += 1
             if self.goal_counter > 10:
                 if_finish = True 
@@ -292,7 +292,7 @@ class Simu_env():
         else:
             self.goal_counter = 0
 
-        if abs(robot_state[1]) > 1 or abs(robot_state[2]) > 0.7: # or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
+        if abs(robot_state[1]) > 1 or abs(robot_state[2]) > 1: # or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
         # if dist > 2:
             is_finish = True
             reward_short = -1
