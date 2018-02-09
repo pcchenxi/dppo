@@ -446,14 +446,14 @@ function sample_new_ep()
     if special > 0 then 
         local skip = 0
         local obs_pos = {}
-        -- global_counter = 4
-        if global_counter == 1 then 
+        -- global_counter = 1
+        if global_counter == 1 then  -- lift
             obs_index = 2
-        elseif global_counter == 2 then  
+        elseif global_counter == 2 then   -- open
             obs_index = 4
-        elseif global_counter == 3 then  
+        elseif global_counter == 3 then   -- avoid
             obs_index = 6
-            -- global_counter = 0
+            global_counter = 0
         else 
             global_counter = 0
             skip = 1

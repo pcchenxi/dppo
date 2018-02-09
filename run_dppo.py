@@ -1,6 +1,7 @@
 from vec_normalize import VecNormalize
 from distributions import make_pdtype
 from utils import ortho_init
+import joblib, time
 
 import tensorflow as tf
 import numpy as np
@@ -13,7 +14,7 @@ import matplotlib.pyplot as plt
 
 EP_MAX = 500000
 EP_LEN = 80
-N_WORKER = 1               # parallel workers
+N_WORKER = 4               # parallel workers
 GAMMA = 0.98                # reward discount factor
 LAM = 1
 A_LR = 0.0001               # learning rate for actor
@@ -22,7 +23,7 @@ LR = 0.0001
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 10240
+BATCH_SIZE = 1000000
 MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
@@ -32,6 +33,12 @@ S_DIM, A_DIM = centauro_env.observation_space, centauro_env.action_space
 Action_Space = centauro_env.action_type
 
 G_ITERATION = 0
+
+mode = 'avoid'
+
+# t_s = time.time()
+# joblib.load('./guided_tra/lift_s.pkl')
+# print(time.time() - t_s)
 
 class PPO(object):
     def __init__(self):
@@ -103,7 +110,7 @@ class PPO(object):
 
     def load_model(self):
         print ('Loading Model...')
-        ckpt = tf.train.get_checkpoint_state('./model/rl/')
+        ckpt = tf.train.get_checkpoint_state('./model/'+mode+'/')
         if ckpt and ckpt.model_checkpoint_path:
             self.saver.restore(self.sess, ckpt.model_checkpoint_path)
             print ('loaded')
@@ -237,8 +244,6 @@ class PPO(object):
 
     def update(self):
         global GLOBAL_UPDATE_COUNTER, G_ITERATION, GLOBAL_EP
-        update_count = 1
-        s_all, a_all, rs_all, rl_all, adv_s_all, adv_l_all = [], [], [], [], [], []
 
         while not COORD.should_stop():
             UPDATE_EVENT.wait()                     # wait until get batch of data
@@ -258,102 +263,17 @@ class PPO(object):
             adv_s = (adv_s.flatten())
             adv_l = (adv_l.flatten())
 
-            adv = adv_l*1
+            file = open('./guided_tra/' + mode + '_s.pkl', 'wb')
+            joblib.dump(s, file, compress=True)
+            file = open('./guided_tra/' + mode + '_a.pkl', 'wb')
+            joblib.dump(a, file, compress=True)
+            file = open('./guided_tra/' + mode + '_ret.pkl', 'wb')
+            joblib.dump(rl, file, compress=True)
+            # file = open('./guided_tra/' + mode + '_info.pkl', 'wb')
+            # joblib.dump(info, file, compress=True)
 
-            adv_s_scale = adv_s * abs(adv.min())
-
-            for i in range(len(adv)):
-                if adv_s[i] < -0.9:
-                    adv[i] = (adv_s_scale[i] + adv[i])/2
-
-            if adv.std() != 0:
-                adv = (adv - adv.mean())/adv.std()
-
-            print(G_ITERATION, '  --------------- update! batch size:', GLOBAL_EP, '-----------------', len(rs))
-
-            for iteration in range(UPDATE_STEP):
-                # construct reward predict data                
-                s_, a_, rs_, rl_, adv_ = self.shuffel_data(s, a, rs, rl, adv)   
-                count = 0
-                for start in range(0, len(rs), MIN_BATCH_SIZE):
-                    end = start + MIN_BATCH_SIZE
-                    if end > len(rs) - 1 and count != 0:
-                        break
-                    if  end > len(rs) - 1 and count == 0:
-                        end = len(rs)-1
-                    count += 1
-
-                    sub_s = s_[start:end]
-                    sub_a = a_[start:end]
-                    sub_rs = rs_[start:end]
-                    sub_rl = rl_[start:end]
-                    sub_adv = np.asarray(adv_[start:end])
-
-                    # sub_s, sub_a, sub_r, sub_adv = self.balance_minibatch(s, a, r, adv, sub_s, sub_a, sub_r, sub_adv, possitive_index, negative_index)
-                    # sub_s, sub_a, sub_rs, sub_rl, sub_adv = self.get_minibatch(s, a, rs, rl, adv, possitive_index, negative_index)
-                    # print(sub_adv)
-                    feed_dict = {
-                        self.tfs: sub_s, 
-                        self.tfa: sub_a, 
-                        self.tfdc_rs: sub_rs,
-                        self.tfdc_rl: sub_rl, 
-                        self.tfadv: sub_adv, 
-                        self.tf_is_train: True
-                    }
-                    self.sess.run(self.train_op, feed_dict = feed_dict)
-                    # self.sess.run([self.atrain_op, self.ctrain_op], feed_dict = feed_dict)
-
-                tloss, aloss, vloss, entropy, grad_norm = self.check_overall_loss(s, a, rs, rl, adv)
-                print("aloss: %7.4f|, vloss: %7.4f| entropy: %7.4f" % (aloss, vloss, entropy), grad_norm)
-                print(iteration)
-
-            feed_dict = {
-                self.tfs: s, 
-                self.tfa: a, 
-                self.tfdc_rs: rs, 
-                self.tfdc_rl: rl, 
-                self.tfadv: adv, 
-                self.tf_is_train: True
-            }
-            # onehota_prob, oldhota_prob, ratio = self.sess.run([self.a_prob, self.olda_prob, self.ratio], feed_dict = feed_dict)
-            # for i in range(len(r)):
-            #     print(onehota_prob[i], oldhota_prob[i], ratio[i])
-
-            ratio, vs, vl = self.sess.run([self.ratio, self.vs, self.vl], feed_dict = feed_dict)
-            ratio = ratio.flatten()
-            for i in range(len(rs)): #range(25):
-                print("%8.4f, %8.4f|, %8.4f, %8.4f|, %8.4f, %8.4f, %8.4f|, %8.4f|"%(rs[i], rl[i], vs[i], vl[i], adv_s[i], adv_l[i], adv[i], ratio[i]), a[i], info[i])
-                # print("%8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %6.0i, %8.4f"%(reward[i], r[i], vpred[i], vpred_new[i], adv[i], ratio[i], a[i], a_prob[i][act]), a_prob[i])
-
-            print(rs.mean(), rl.mean())
-
-            tloss, aloss, vloss, entropy, grad_norm = self.sess.run([self.total_loss, self.aloss, self.closs, self.entropy, self.grad_norm], feed_dict = feed_dict)
-            print('-------------------------------------------------------------------------------')
-            print("aloss: %7.4f|, vloss: %7.4f| entropy: %7.4f" % (aloss, vloss, entropy), grad_norm)
-
-            self.write_summary('Loss/entropy', entropy)  
-            self.write_summary('Loss/a loss', aloss) 
-            self.write_summary('Loss/v loss', vloss) 
-            self.write_summary('Loss/grad norm', grad_norm) 
-            self.write_summary('Loss/avg_rew', rl.mean()) 
-            # self.write_summary('Perf/mean_reward', np.mean(reward))  
-
-            self.saver.save(self.sess, './model/rl/model.cptk') 
-
-            UPDATE_EVENT.clear()        # updating finished
-            GLOBAL_UPDATE_COUNTER = 0   # reset counter
-            G_ITERATION += 1
-            # GLOBAL_EP = 0
-            ROLLING_EVENT.set()         # set roll-out available
-            
-            update_count += 1
-            if update_count % UPDATE_L_STEP == 1:
-                update_count = 1
-                s_all, a_all, rs_all, rl_all, adv_s_all, adv_l_all = [], [], [], [], [], []
-                print('reset')
-
-            if entropy < 1:         # stop training
-                COORD.request_stop()
+            print('pickled!!', len(a))
+            COORD.request_stop()
 
 
 class Worker(object):
@@ -409,19 +329,18 @@ class Worker(object):
                 mask_v = pose_mask[row, col]
                 if mask_v == 0:
                     cv2.circle(img, (col, row), r, h, -1)
-                    print(img[row, col])
                     success = True
 
         new_img = img.flatten()
         s_new = s
         s_new[:-4] = new_img
 
-        if success:
-            plt.clf()
-            plt.imshow(img)
-            plt.pause(0.5)
-            plt.imshow(pose_mask)
-            plt.pause(0.5)            
+        # if success:
+        #     plt.clf()
+        #     plt.imshow(img)
+        #     plt.pause(0.5)
+        #     plt.imshow(pose_mask)
+        #     plt.pause(0.5)            
 
         return s_new, success
 
@@ -499,28 +418,15 @@ class Worker(object):
         buffer_adv_s, buffer_return_s = self.compute_adv_return(buffer_rs, buffer_vpred_s, buffer_info, 'short')
         buffer_adv_l, buffer_return_l = self.compute_adv_return(buffer_rl, buffer_vpred_l, buffer_info, 'long')
 
-        # for i in range(len(buffer_return_s)):
-        #     buffer_return_l[i] = buffer_return_l[i] + (buffer_return_s[i])
-            # print(before, buffer_rl[i], buffer_return_s[i])
-
         buffer_adv_s = buffer_return_s*1
-
-        # if buffer_adv_l.max() > 0:
-        #     buffer_adv_l = buffer_adv_s * buffer_adv_l.max() + buffer_adv_l
-        # else:
-        #     buffer_adv_l = buffer_adv_s * abs(buffer_adv_l.min()) + buffer_adv_l
-        
-        # for i in range(len(buffer_adv_s)):
-        #     if buffer_adv_s[i] > -0: # and buffer_adv_s[i] < 0.5:
-        #         buffer_adv_s[i] = 0
 
         # buffer_adv_l = buffer_return_l - buffer_vpred_l[:-1]
         buffer_adv = buffer_adv_s + buffer_adv_l
 
-        if self.wid == 0:
-            print('----')
-            for i in range(len(buffer_adv)):
-                print("rs: %7.4f| rl: %7.4f| vs: %7.4f| vl: %7.4f| adv_s: %7.4f| adv_l: %7.4f| r_s: %7.4f| r_l: %7.4f" %(buffer_rs[i], buffer_rl[i], buffer_vpred_s[i], buffer_vpred_l[i], buffer_adv_s[i], buffer_adv_l[i], buffer_return_s[i], buffer_return_l[i]), buffer_info[i])
+        # if self.wid == 0:
+        #     print('----')
+        #     for i in range(len(buffer_adv)):
+        #         print("rs: %7.4f| rl: %7.4f| vs: %7.4f| vl: %7.4f| adv_s: %7.4f| adv_l: %7.4f| r_s: %7.4f| r_l: %7.4f" %(buffer_rs[i], buffer_rl[i], buffer_vpred_s[i], buffer_vpred_l[i], buffer_adv_s[i], buffer_adv_l[i], buffer_return_s[i], buffer_return_l[i]), buffer_info[i])
             
         info_num = []
         for info in buffer_info:
@@ -562,6 +468,17 @@ class Worker(object):
             if saved_ep > ep_num:
                 break
         print (goal_num/10)
+
+    def filter_crash(self, buffer_s, buffer_a, buffer_r, buffer_info):
+        s, a, r, info = [], [], [], []
+        for i in range(len(buffer_r)):
+            if buffer_info[i] != 'crash' and buffer_info[i] != 'crash_a':
+                s.append(buffer_s[i])
+                a.append(buffer_a[i])
+                r.append(buffer_r[i])
+                info.append(buffer_info[i])
+
+        return s, a, r, info
 
     def work(self):
         global GLOBAL_EP, GLOBAL_RUNNING_R, GLOBAL_UPDATE_COUNTER \
@@ -605,15 +522,6 @@ class Worker(object):
                 s_, r_short, r_long, done, info = self.env.step(a)
                 vpred_s, vpred_l = self.ppo.get_v(s)
 
-                # img = self.ppo.sess.run(self.ppo.img, feed_dict = {self.ppo.tfs:[s]})[0]
-                # plt.clf()
-                # plt.imshow(img)
-                # plt.pause(0.01)
-
-                # if self.wid == 0:
-                #     prob = self.ppo.get_action_prob(s)
-                #     print("a: %6i | rs: %7.4f| rl: %7.4f| rs: %7.4f| rl: %7.4f| prob: %7.4f" %(a, r_short, r_long, vpred_s, vpred_l, prob[a]), info)
-
                 buffer_s.append(s*1)
                 buffer_a.append(a)
                 buffer_rs.append(r_short)                    # normalize reward, find to be useful
@@ -627,33 +535,24 @@ class Worker(object):
                 s = s_
                 t += 1
 
-                # if info == 'crash' and saved_ep == False:
-                #     # self.env.save_ep()
-                #     # self.env.save_start_end_ep()
-                #     saved_ep = True
-
-                # if self.wid == 0:
-                #     if t == ep_length-1 or done:
-                #         buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
-                #         break
-                #     else:
-                #         continue
-
-                if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE or t == ep_length-1 or done:
+                if done or t == ep_length-1:
                 # if (GLOBAL_EP != 0 and GLOBAL_EP%EP_BATCH_SIZE == 0) or t == ep_length-1 or done:
-
-                    buffer_return_s, buffer_return_l, buffer_adv_s, buffer_adv_l, info_num = self.process_and_send(buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_info, s_, self.env.return_end)
-                    bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return_s)[:, np.newaxis], np.array(buffer_return_l)[:, np.newaxis], np.array(buffer_adv_s)[:, np.newaxis], np.array(buffer_adv_l)[:, np.newaxis], np.vstack(info_num)     
-                    QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
-
                     if info == 'goal':
-                        aug_s, aug_a, aug_return_s, aug_return_l, aug_adv_s, aug_adv_l, info_num = self.get_aurgm_batch(5, buffer_s, buffer_a, buffer_return_s, buffer_return_l, info_num)
+                        buffer_s, buffer_a, buffer_rl, buffer_info = self.filter_crash(buffer_s, buffer_a, buffer_rl, buffer_info)
+                        buffer_rs = buffer_rl*1
+
+                        buffer_return_s, buffer_return_l, buffer_adv_s, buffer_adv_l, info_num = self.process_and_send(buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_info, s_, self.env.return_end)
+                        bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return_s)[:, np.newaxis], np.array(buffer_return_l)[:, np.newaxis], np.array(buffer_adv_s)[:, np.newaxis], np.array(buffer_adv_l)[:, np.newaxis], np.vstack(info_num)     
+                        QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
+
+                        aug_s, aug_a, aug_return_s, aug_return_l, aug_adv_s, aug_adv_l, info_num = self.get_aurgm_batch(100, buffer_s, buffer_a, buffer_return_s, buffer_return_l, info_num)
                         if (aug_s != []):
                             bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(aug_s), np.vstack(aug_a), np.array(aug_return_s)[:, np.newaxis], np.array(aug_return_l)[:, np.newaxis], np.array(aug_adv_s)[:, np.newaxis], np.array(aug_adv_l)[:, np.newaxis], np.vstack(info_num)     
                             QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
                             GLOBAL_UPDATE_COUNTER += len(aug_a)
                             print('generage new batch:', len(aug_a))
 
+                    print('GLOBAL_UPDATE_COUNTER', GLOBAL_UPDATE_COUNTER, GLOBAL_UPDATE_COUNTER/BATCH_SIZE)
                     buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
                     if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE:
                     # if (GLOBAL_EP != 0 and GLOBAL_EP%EP_BATCH_SIZE == 0):
