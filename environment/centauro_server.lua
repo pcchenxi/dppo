@@ -347,7 +347,7 @@ end
 
 function sample_obstacle_position()
     local visable_count = 0
-    local max_count = 0 --math.random(6)
+    local max_count = 0 --math.random(8)
     local start = math.random(#_obs_hds)
     for i=start, start + #_obs_hds, 1 do
         local visable = math.random()
@@ -446,7 +446,7 @@ function sample_new_ep()
     if special > 0 then 
         local skip = 0
         local obs_pos = {}
-        -- global_counter = 4
+        global_counter = 2
         if global_counter == 1 then 
             obs_index = 2
         elseif global_counter == 2 then  

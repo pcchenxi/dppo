@@ -11,9 +11,11 @@ import scipy.signal
 import cv2, math, time
 import matplotlib.pyplot as plt
 
+import joblib, time
+
 EP_MAX = 500000
 EP_LEN = 80
-N_WORKER = 1               # parallel workers
+N_WORKER = 4               # parallel workers
 GAMMA = 0.98                # reward discount factor
 LAM = 1
 A_LR = 0.0001               # learning rate for actor
@@ -22,7 +24,7 @@ LR = 0.0001
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 10240
+BATCH_SIZE = 2048
 MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
@@ -32,6 +34,17 @@ S_DIM, A_DIM = centauro_env.observation_space, centauro_env.action_space
 Action_Space = centauro_env.action_type
 
 G_ITERATION = 0
+
+t_s = time.time()
+G_lift_s = joblib.load('./guided_tra/lift_s.pkl')
+G_lift_a = joblib.load('./guided_tra/lift_a.pkl')
+G_lift_ret = joblib.load('./guided_tra/lift_ret.pkl')
+
+G_straight_s = joblib.load('./guided_tra/straight_s.pkl')
+G_straight_a = joblib.load('./guided_tra/straight_a.pkl')
+G_straight_ret = joblib.load('./guided_tra/straight_ret.pkl')
+
+print(time.time() - t_s)
 
 class PPO(object):
     def __init__(self):
@@ -67,7 +80,7 @@ class PPO(object):
         vpredclipped = oldvl + tf.clip_by_value(self.vl - oldvl, - EPSILON, EPSILON)
         vf_losses1 = tf.square(self.vl - self.tfdc_rl)
         vf_losses2 = tf.square(vpredclipped - self.tfdc_rl)
-        vf_loss = .5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
+        vf_loss = .2 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
         ratio = tf.exp(OLDNEGLOGPAC - neglogpac)
         pg_losses = -self.tfadv * ratio
         pg_losses2 = -self.tfadv * tf.clip_by_value(ratio, 1.0 - EPSILON, 1.0 + EPSILON)
@@ -99,7 +112,7 @@ class PPO(object):
         self.ratio = ratio
         self.grad_norm = _grad_norm
 
-        self.load_model()   
+        # self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')
@@ -235,6 +248,37 @@ class PPO(object):
         tloss, aloss, vloss, entropy, grad_norm = self.sess.run([self.total_loss, self.aloss, self.closs, self.entropy, self.grad_norm], feed_dict = feed_dict)
         return tloss, aloss, vloss, entropy, grad_norm
 
+    def load_guid_tra(self, s, a, rs, rl, adv_s, adv_l, info):
+        g_s, g_a, g_rl, g_info = [], [], [], []
+
+        selected_index = np.random.choice(len(G_lift_a), int(BATCH_SIZE*0.5), replace=False)
+        for index in selected_index:
+            g_s.append(G_lift_s[index])
+            g_a.append(G_lift_a[index])
+            g_rl.append(G_lift_ret[index])
+            g_info.append(3)
+
+        selected_index = np.random.choice(len(G_straight_a), int(BATCH_SIZE*0.5), replace=False)
+        for index in selected_index:
+            g_s.append(G_straight_s[index])
+            g_a.append(G_straight_a[index])
+            g_rl.append(G_straight_ret[index])
+            g_info.append(3)
+
+        print('g_tra num', len(g_s))
+        g_vpred_l = self.sess.run(self.vl, feed_dict = {self.tfs: g_s})
+        g_adv = g_rl-g_vpred_l
+
+        s = np.concatenate((s, g_s), axis = 0)
+        a = np.concatenate((a, g_a), axis = 0)
+        rs = np.concatenate((rs, g_rl), axis = 0)
+        rl = np.concatenate((rl, g_rl), axis = 0)
+        adv_s = np.concatenate((adv_s, g_adv), axis = 0)
+        adv_l = np.concatenate((adv_l, g_adv), axis = 0)
+        info = np.concatenate((info, g_info), axis = 0)
+
+        return s, a, rs, rl, adv_s, adv_l, info
+
     def update(self):
         global GLOBAL_UPDATE_COUNTER, G_ITERATION, GLOBAL_EP
         update_count = 1
@@ -257,14 +301,16 @@ class PPO(object):
             rl = (rl.flatten())
             adv_s = (adv_s.flatten())
             adv_l = (adv_l.flatten())
+            info = info.flatten()
+
+            s, a, rs, rl, adv_s, adv_l, info = self.load_guid_tra(s, a, rs, rl, adv_s, adv_l, info)
 
             adv = adv_l*1
 
-            adv_s_scale = adv_s * abs(adv.min())
-
-            for i in range(len(adv)):
-                if adv_s[i] < -0.9:
-                    adv[i] = (adv_s_scale[i] + adv[i])/2
+            # adv_s_scale = adv_s * abs(adv.min())
+            # for i in range(len(adv)):
+            #     if adv_s[i] < -0.9:
+            #         adv[i] = (adv_s_scale[i] + adv[i])/2
 
             if adv.std() != 0:
                 adv = (adv - adv.mean())/adv.std()
@@ -515,11 +561,10 @@ class Worker(object):
         #         buffer_adv_s[i] = 0
 
         # buffer_adv_l = buffer_return_l - buffer_vpred_l[:-1]
-        buffer_adv = buffer_adv_s + buffer_adv_l
 
         if self.wid == 0:
             print('----')
-            for i in range(len(buffer_adv)):
+            for i in range(len(buffer_a)):
                 print("rs: %7.4f| rl: %7.4f| vs: %7.4f| vl: %7.4f| adv_s: %7.4f| adv_l: %7.4f| r_s: %7.4f| r_l: %7.4f" %(buffer_rs[i], buffer_rl[i], buffer_vpred_s[i], buffer_vpred_l[i], buffer_adv_s[i], buffer_adv_l[i], buffer_return_s[i], buffer_return_l[i]), buffer_info[i])
             
         info_num = []
@@ -646,13 +691,13 @@ class Worker(object):
                     bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return_s)[:, np.newaxis], np.array(buffer_return_l)[:, np.newaxis], np.array(buffer_adv_s)[:, np.newaxis], np.array(buffer_adv_l)[:, np.newaxis], np.vstack(info_num)     
                     QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
 
-                    if info == 'goal':
-                        aug_s, aug_a, aug_return_s, aug_return_l, aug_adv_s, aug_adv_l, info_num = self.get_aurgm_batch(5, buffer_s, buffer_a, buffer_return_s, buffer_return_l, info_num)
-                        if (aug_s != []):
-                            bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(aug_s), np.vstack(aug_a), np.array(aug_return_s)[:, np.newaxis], np.array(aug_return_l)[:, np.newaxis], np.array(aug_adv_s)[:, np.newaxis], np.array(aug_adv_l)[:, np.newaxis], np.vstack(info_num)     
-                            QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
-                            GLOBAL_UPDATE_COUNTER += len(aug_a)
-                            print('generage new batch:', len(aug_a))
+                    # if info == 'goal':
+                    #     aug_s, aug_a, aug_return_s, aug_return_l, aug_adv_s, aug_adv_l, info_num = self.get_aurgm_batch(5, buffer_s, buffer_a, buffer_return_s, buffer_return_l, info_num)
+                    #     if (aug_s != []):
+                    #         bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(aug_s), np.vstack(aug_a), np.array(aug_return_s)[:, np.newaxis], np.array(aug_return_l)[:, np.newaxis], np.array(aug_adv_s)[:, np.newaxis], np.array(aug_adv_l)[:, np.newaxis], np.vstack(info_num)     
+                    #         QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
+                    #         GLOBAL_UPDATE_COUNTER += len(aug_a)
+                    #         print('generage new batch:', len(aug_a))
 
                     buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
                     if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE:
