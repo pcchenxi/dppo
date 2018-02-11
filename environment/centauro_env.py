@@ -280,7 +280,7 @@ class Simu_env():
         # if np.count_nonzero(action) == 0:
             # event_reward = REWARD_CRASH
 
-        if dist < 0.1: # and info != 'crash': # and diff_l < 0.02:
+        if dist < 0.2: # and info != 'crash': # and diff_l < 0.02:
         # if robot_state[2] > 0.2 and info != 'crash':
             is_finish = True
             self.goal_counter += 1

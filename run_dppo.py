@@ -14,8 +14,8 @@ import matplotlib.pyplot as plt
 import joblib, time
 
 EP_MAX = 500000
-EP_LEN = 80
-N_WORKER = 4               # parallel workers
+EP_LEN = 50
+N_WORKER = 7               # parallel workers
 GAMMA = 0.98                # reward discount factor
 LAM = 1
 A_LR = 0.0001               # learning rate for actor
@@ -24,7 +24,7 @@ LR = 0.0001
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 2048
+BATCH_SIZE = 5120
 MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
@@ -36,14 +36,24 @@ Action_Space = centauro_env.action_type
 G_ITERATION = 0
 
 t_s = time.time()
-G_lift_s = joblib.load('./guided_tra/lift_s.pkl')
-G_lift_a = joblib.load('./guided_tra/lift_a.pkl')
-G_lift_ret = joblib.load('./guided_tra/lift_ret.pkl')
+G_lift_s, G_straight_s, G_avoid_s, G_open_s = [], [], [], []
+G_lift_s = joblib.load('./guided_tra/lift_s_test.pkl')
+G_lift_a = joblib.load('./guided_tra/lift_a_test.pkl')
+G_lift_ret = joblib.load('./guided_tra/lift_ret_test.pkl')
 
-G_straight_s = joblib.load('./guided_tra/straight_s.pkl')
-G_straight_a = joblib.load('./guided_tra/straight_a.pkl')
-G_straight_ret = joblib.load('./guided_tra/straight_ret.pkl')
+G_straight_s = joblib.load('./guided_tra/straight_s.pkl')[:100000]
+G_straight_a = joblib.load('./guided_tra/straight_a.pkl')[:100000]
+G_straight_ret = joblib.load('./guided_tra/straight_ret.pkl')[:100000]
 
+G_avoid_s = joblib.load('./guided_tra/avoid_s.pkl')
+G_avoid_a = joblib.load('./guided_tra/avoid_a.pkl')
+G_avoid_ret = joblib.load('./guided_tra/avoid_ret.pkl')
+
+G_open_s = joblib.load('./guided_tra/open_s.pkl')
+G_open_a = joblib.load('./guided_tra/open_a.pkl')
+G_open_ret = joblib.load('./guided_tra/open_ret.pkl')
+
+print('loaded', len(G_lift_s), len(G_straight_s), len(G_avoid_s), len(G_open_s))
 print(time.time() - t_s)
 
 class PPO(object):
@@ -80,7 +90,7 @@ class PPO(object):
         vpredclipped = oldvl + tf.clip_by_value(self.vl - oldvl, - EPSILON, EPSILON)
         vf_losses1 = tf.square(self.vl - self.tfdc_rl)
         vf_losses2 = tf.square(vpredclipped - self.tfdc_rl)
-        vf_loss = .2 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
+        vf_loss = 5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
         ratio = tf.exp(OLDNEGLOGPAC - neglogpac)
         pg_losses = -self.tfadv * ratio
         pg_losses2 = -self.tfadv * tf.clip_by_value(ratio, 1.0 - EPSILON, 1.0 + EPSILON)
@@ -112,7 +122,7 @@ class PPO(object):
         self.ratio = ratio
         self.grad_norm = _grad_norm
 
-        # self.load_model()   
+        self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')
@@ -251,19 +261,102 @@ class PPO(object):
     def load_guid_tra(self, s, a, rs, rl, adv_s, adv_l, info):
         g_s, g_a, g_rl, g_info = [], [], [], []
 
-        selected_index = np.random.choice(len(G_lift_a), int(BATCH_SIZE*0.5), replace=False)
-        for index in selected_index:
-            g_s.append(G_lift_s[index])
-            g_a.append(G_lift_a[index])
-            g_rl.append(G_lift_ret[index])
-            g_info.append(3)
+        size = 2560 #int(len(a)/4) #int(BATCH_SIZE*0.3)
+        # selected_index = np.random.choice(len(G_lift_a), size, replace=False)
+        # selected_index = np.random.randint(len(G_lift_a) - size - 1)
+        simi_threshold = 8
+        print(len(a))
+        for index_s in range(0, len(s), 2):
+            sub_s = s[index_s]
+            found_num = 0
+            for _ in range(600):
+                index_lift = np.random.randint(len(G_lift_s))
+                index_straight = np.random.randint(len(G_straight_s))
+                index_open = np.random.randint(len(G_open_s))
+                index_avoid = np.random.randint(len(G_avoid_s))
 
-        selected_index = np.random.choice(len(G_straight_a), int(BATCH_SIZE*0.5), replace=False)
-        for index in selected_index:
-            g_s.append(G_straight_s[index])
-            g_a.append(G_straight_a[index])
-            g_rl.append(G_straight_ret[index])
-            g_info.append(3)
+                diff = np.sum(abs(G_lift_s[index_lift] - sub_s))
+                if diff < simi_threshold:
+                    g_s.append(G_lift_s[index_lift])
+                    g_a.append(G_lift_a[index_lift])
+                    g_rl.append(G_lift_ret[index_lift])
+                    # g_rl.append(0)
+                    g_info.append(11)
+                    found_num += 1       
+
+                diff = np.sum(abs(G_straight_s[index_straight] - sub_s))
+                if diff < simi_threshold:
+                    g_s.append(G_straight_s[index_straight])
+                    g_a.append(G_straight_a[index_straight])
+                    g_rl.append(G_straight_ret[index_straight])
+                    # g_rl.append(0)
+                    g_info.append(12)
+                    found_num += 1   
+
+                diff = np.sum(abs(G_open_s[index_open] - sub_s))
+                if diff < simi_threshold:
+                    g_s.append(G_open_s[index_open])
+                    g_a.append(G_open_a[index_open])
+                    g_rl.append(G_open_ret[index_open])
+                    # g_rl.append(0)
+                    g_info.append(13)
+                    found_num += 1  
+
+                diff = np.sum(abs(G_avoid_s[index_avoid] - sub_s))
+                if diff < simi_threshold:
+                    g_s.append(G_avoid_s[index_avoid])
+                    g_a.append(G_avoid_a[index_avoid])
+                    g_rl.append(G_avoid_ret[index_avoid])
+                    # g_rl.append(0)
+                    g_info.append(14)
+                    found_num += 1  
+
+                if found_num > 1:
+                    break  
+
+        # for index in range(selected_index, selected_index+size):    
+        #     diff = np.sum(abs(G_lift_s[index] - s[0]))
+        #     # if diff < 10:
+        #     #     img = s[0][:-4].reshape((30,30))
+        #     #     img2 = G_lift_s[index][:-4].reshape((30,30))
+        #     #     plt.clf()
+        #     #     plt.imshow(img)
+        #     #     plt.pause(0.5)
+        #     #     plt.imshow(img2)
+        #     #     plt.pause(0.5)   
+        #     #     print(G_lift_a[index], diff)
+
+        # # for index in selected_index:
+        #     g_s.append(G_lift_s[index])
+        #     g_a.append(G_lift_a[index])
+        #     g_rl.append(G_lift_ret[index])
+        #     # g_rl.append(0)
+        #     g_info.append(11)
+
+        # selected_index = np.random.choice(len(G_avoid_a), size, replace=False)
+        # for index in selected_index:
+        #     g_s.append(G_avoid_s[index])
+        #     g_a.append(G_avoid_a[index])
+        #     g_rl.append(G_avoid_ret[index])
+        #     # g_rl.append(0)
+        #     g_info.append(12)
+
+        # selected_index = np.random.choice(len(G_open_a), size, replace=False)
+        # for index in selected_index:
+        #     g_s.append(G_open_s[index])
+        #     g_a.append(G_open_a[index])
+        #     g_rl.append(G_open_ret[index])
+        #     # g_rl.append(0)
+        #     g_info.append(13)
+                    
+        # selected_index = np.random.choice(len(G_straight_a), size, replace=False)
+        # selected_index = np.random.randint(len(G_straight_a) - size - 1)
+        # for index in range(selected_index, selected_index+size):
+        #     g_s.append(G_straight_s[index])
+        #     g_a.append(G_straight_a[index])
+        #     g_rl.append(G_straight_ret[index])
+        #     # g_rl.append(0)
+        #     g_info.append(14)
 
         print('g_tra num', len(g_s))
         g_vpred_l = self.sess.run(self.vl, feed_dict = {self.tfs: g_s})
@@ -334,7 +427,8 @@ class PPO(object):
                     sub_rs = rs_[start:end]
                     sub_rl = rl_[start:end]
                     sub_adv = np.asarray(adv_[start:end])
-
+                    sub_info = info[start:end]
+                    # sub_s, sub_a, sub_rs, sub_rl, sub_adv, sub_adv, sub_info = self.load_guid_tra(sub_s, sub_a, sub_rs, sub_rl, sub_adv, sub_adv, sub_info)
                     # sub_s, sub_a, sub_r, sub_adv = self.balance_minibatch(s, a, r, adv, sub_s, sub_a, sub_r, sub_adv, possitive_index, negative_index)
                     # sub_s, sub_a, sub_rs, sub_rl, sub_adv = self.get_minibatch(s, a, rs, rl, adv, possitive_index, negative_index)
                     # print(sub_adv)
@@ -349,8 +443,8 @@ class PPO(object):
                     self.sess.run(self.train_op, feed_dict = feed_dict)
                     # self.sess.run([self.atrain_op, self.ctrain_op], feed_dict = feed_dict)
 
-                tloss, aloss, vloss, entropy, grad_norm = self.check_overall_loss(s, a, rs, rl, adv)
-                print("aloss: %7.4f|, vloss: %7.4f| entropy: %7.4f" % (aloss, vloss, entropy), grad_norm)
+                # tloss, aloss, vloss, entropy, grad_norm = self.check_overall_loss(s, a, rs, rl, adv)
+                # print("aloss: %7.4f|, vloss: %7.4f| entropy: %7.4f" % (aloss, vloss, entropy), grad_norm)
                 print(iteration)
 
             feed_dict = {
@@ -583,19 +677,21 @@ class Worker(object):
     def test_model(self, ep_num):
         goal_num = 0
         saved_ep = 0
+        count = 0
         max_step = int(EP_LEN/3 * 2)
         print('searching for failed ep', ep_num) 
         for test_num in range(100):
+            count += 1
             s = self.env.reset(0, 0, 1)
             for step in range(max_step):
                 a = self.ppo.choose_action(s, False)
                 s_, r_short, r_long, done, info = self.env.step(a)
 
                 s = s_
-                if info == 'crash':
-                    self.env.save_start_end_ep()
-                    saved_ep += 1
-                    break                    
+                # if info == 'crash':
+                #     self.env.save_start_end_ep()
+                #     saved_ep += 1
+                #     break                    
                 if done or step == max_step-1:
                     # print(test_num, info)
                     if info == 'goal':
@@ -606,7 +702,7 @@ class Worker(object):
                     break
             if saved_ep > ep_num:
                 break
-        print (goal_num/10)
+        print (goal_num/count)
 
     def work(self):
         global GLOBAL_EP, GLOBAL_RUNNING_R, GLOBAL_UPDATE_COUNTER \
@@ -615,7 +711,8 @@ class Worker(object):
             , History_states, History_count, History_adv, History_return, History_buffer_full
 
         # self.env.save_ep()
-        # self.test_model(5)
+        if self.wid != 0:
+            self.test_model(5)
         # for _ in range(2):
         #     s = self.env.reset( 0, 0, 1)
         #     self.env.save_ep()
@@ -637,12 +734,12 @@ class Worker(object):
             s = self.env.reset( 0, 1, 1)
 
             while(1):
-                if not ROLLING_EVENT.is_set():                  # while global PPO is updating
+                if not ROLLING_EVENT.is_set() and self.wid != 0:                  # while global PPO is updating
                     ROLLING_EVENT.wait()                        # wait until PPO is updated
                     buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
                     # if update_counter%1 == 0:
                         # self.env.clear_history()
-                    # self.test_model(5)
+                    self.test_model(5)
                     update_counter += 1
 
                 a = self.ppo.choose_action(s, False)
@@ -684,9 +781,11 @@ class Worker(object):
                 #     else:
                 #         continue
 
-                if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE or t == ep_length-1 or done:
-                # if (GLOBAL_EP != 0 and GLOBAL_EP%EP_BATCH_SIZE == 0) or t == ep_length-1 or done:
+                if self.wid == 0 and (done or t == EP_LEN-1):
+                    break
 
+                if (GLOBAL_UPDATE_COUNTER >= BATCH_SIZE or t == ep_length-1 or done) and self.wid != 0 :
+                # if (GLOBAL_EP != 0 and GLOBAL_EP%EP_BATCH_SIZE == 0) or t == ep_length-1 or done:
                     buffer_return_s, buffer_return_l, buffer_adv_s, buffer_adv_l, info_num = self.process_and_send(buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_info, s_, self.env.return_end)
                     bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return_s)[:, np.newaxis], np.array(buffer_return_l)[:, np.newaxis], np.array(buffer_adv_s)[:, np.newaxis], np.array(buffer_adv_l)[:, np.newaxis], np.vstack(info_num)     
                     QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
