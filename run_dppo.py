@@ -12,10 +12,11 @@ import cv2, math, time
 import matplotlib.pyplot as plt
 
 import joblib, time
+import cv2
 
 EP_MAX = 500000
-EP_LEN = 50
-N_WORKER = 7               # parallel workers
+EP_LEN = 80
+N_WORKER = 1               # parallel workers
 GAMMA = 0.98                # reward discount factor
 LAM = 1
 A_LR = 0.0001               # learning rate for actor
@@ -24,7 +25,7 @@ LR = 0.0001
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 5120
+BATCH_SIZE = 10240
 MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
@@ -37,21 +38,21 @@ G_ITERATION = 0
 
 t_s = time.time()
 G_lift_s, G_straight_s, G_avoid_s, G_open_s = [], [], [], []
-G_lift_s = joblib.load('./guided_tra/lift_s_test.pkl')
-G_lift_a = joblib.load('./guided_tra/lift_a_test.pkl')
-G_lift_ret = joblib.load('./guided_tra/lift_ret_test.pkl')
+# G_lift_s = joblib.load('./guided_tra/lift_s_test.pkl')
+# G_lift_a = joblib.load('./guided_tra/lift_a_test.pkl')
+# G_lift_ret = joblib.load('./guided_tra/lift_ret_test.pkl')
 
-G_straight_s = joblib.load('./guided_tra/straight_s.pkl')[:100000]
-G_straight_a = joblib.load('./guided_tra/straight_a.pkl')[:100000]
-G_straight_ret = joblib.load('./guided_tra/straight_ret.pkl')[:100000]
+# G_straight_s = joblib.load('./guided_tra/straight_s.pkl')[:100000]
+# G_straight_a = joblib.load('./guided_tra/straight_a.pkl')[:100000]
+# G_straight_ret = joblib.load('./guided_tra/straight_ret.pkl')[:100000]
 
-G_avoid_s = joblib.load('./guided_tra/avoid_s.pkl')
-G_avoid_a = joblib.load('./guided_tra/avoid_a.pkl')
-G_avoid_ret = joblib.load('./guided_tra/avoid_ret.pkl')
+# G_avoid_s = joblib.load('./guided_tra/avoid_s.pkl')
+# G_avoid_a = joblib.load('./guided_tra/avoid_a.pkl')
+# G_avoid_ret = joblib.load('./guided_tra/avoid_ret.pkl')
 
-G_open_s = joblib.load('./guided_tra/open_s.pkl')
-G_open_a = joblib.load('./guided_tra/open_a.pkl')
-G_open_ret = joblib.load('./guided_tra/open_ret.pkl')
+# G_open_s = joblib.load('./guided_tra/open_s.pkl')
+# G_open_a = joblib.load('./guided_tra/open_a.pkl')
+# G_open_ret = joblib.load('./guided_tra/open_ret.pkl')
 
 print('loaded', len(G_lift_s), len(G_straight_s), len(G_avoid_s), len(G_open_s))
 print(time.time() - t_s)
@@ -100,7 +101,7 @@ class PPO(object):
         loss = pg_loss - self.entropy * 0.001 + vf_loss
 
         params = tf.trainable_variables(scope='net')
-        print(params)
+        # print(params)
 
         grads = tf.gradients(loss, params)
         max_grad_norm = 0.5
@@ -396,7 +397,7 @@ class PPO(object):
             adv_l = (adv_l.flatten())
             info = info.flatten()
 
-            s, a, rs, rl, adv_s, adv_l, info = self.load_guid_tra(s, a, rs, rl, adv_s, adv_l, info)
+            # s, a, rs, rl, adv_s, adv_l, info = self.load_guid_tra(s, a, rs, rl, adv_s, adv_l, info)
 
             adv = adv_l*1
 
@@ -674,6 +675,41 @@ class Worker(object):
         
         return buffer_return_s, buffer_return_l, buffer_adv_s, buffer_adv_l, info_num
 
+    def evaluate_model(self, ep_num):
+        goal_num = 0
+        failed_num = 0
+
+        sum_reward = 0
+        step_count = 0
+
+        max_step = int(EP_LEN)
+        print('evaluating model', ep_num) 
+        for test_num in range(ep_num):
+            s = self.env.reset(0, 1, 1)
+            if test_num > 0 and test_num % 100 == 0:
+                print(test_num)
+                print ('success rate', goal_num/ep_num, 'failed rate', failed_num/ep_num, 'average reward', sum_reward/step_count)
+            for step in range(max_step):
+                a = self.ppo.choose_action(s, True)
+                s_, r_short, r_long, done, info = self.env.step(a)
+
+                step_count += 1
+                sum_reward += r_long
+                s = s_
+                # if info == 'crash':
+                #     self.env.save_start_end_ep()
+                #     saved_ep += 1
+                #     break                    
+                if done or step == max_step-1:
+                    # print(test_num, info)
+                    if info == 'goal':
+                        goal_num += 1   
+                    else:
+                        failed_num += 1  
+                    break
+
+        print ('success rate', goal_num/ep_num, 'failed rate', failed_num/ep_num, 'average reward', sum_reward/step_count)
+
     def test_model(self, ep_num):
         goal_num = 0
         saved_ep = 0
@@ -710,9 +746,11 @@ class Worker(object):
             , Crash_states, Crash_count, Crash_return, Crash_buffer_full \
             , History_states, History_count, History_adv, History_return, History_buffer_full
 
-        # self.env.save_ep()
+        self.env.save_ep()
         if self.wid != 0:
             self.test_model(5)
+        else:
+            self.evaluate_model(1000)
         # for _ in range(2):
         #     s = self.env.reset( 0, 0, 1)
         #     self.env.save_ep()
