@@ -123,7 +123,7 @@ class PPO(object):
         self.ratio = ratio
         self.grad_norm = _grad_norm
 
-        # self.load_model()   
+        self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')
@@ -399,7 +399,7 @@ class PPO(object):
             info = info.flatten()
             ret_mean = rl.mean()
             r_mean = adv_s.mean()
-            s, a, rs, rl, adv_s, adv_l, info = self.load_guid_tra(s, a, rs, rl, adv_s, adv_l, info)
+            # s, a, rs, rl, adv_s, adv_l, info = self.load_guid_tra(s, a, rs, rl, adv_s, adv_l, info)
 
             adv = adv_l*1
 
@@ -923,7 +923,7 @@ if __name__ == '__main__':
     ROLLING_EVENT.set()             # start to roll out
     workers = [Worker(wid=i) for i in range(N_WORKER)]
     
-    GLOBAL_UPDATE_COUNTER, GLOBAL_EP, GLOBAL_STEP = 0, 1, 1
+    GLOBAL_UPDATE_COUNTER, GLOBAL_EP, GLOBAL_STEP = 0, 1, 1212000
 
     GLOBAL_RUNNING_R = []
     COORD = tf.train.Coordinator()
