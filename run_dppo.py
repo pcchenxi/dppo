@@ -15,7 +15,7 @@ import joblib, time
 import cv2
 
 EP_MAX = 500000
-EP_LEN = 80
+EP_LEN = 50
 N_WORKER = 1               # parallel workers
 GAMMA = 0.98                # reward discount factor
 LAM = 1
@@ -25,7 +25,7 @@ LR = 0.0001
 
 EP_BATCH_SIZE = 5
 UPDATE_L_STEP = 30
-BATCH_SIZE = 10240
+BATCH_SIZE = 2048
 MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
 
 UPDATE_STEP = 5            # loop update operation n-steps
@@ -675,6 +675,34 @@ class Worker(object):
         
         return buffer_return_s, buffer_return_l, buffer_adv_s, buffer_adv_l, info_num
 
+
+    def draw_path(self, index):
+        grid_size = 0.005
+        map_size = 3
+        path_img = np.zeros((int(map_size/grid_size), int(map_size/grid_size)), np.uint8)
+        g_map_shift = map_size/2
+        g_map_pixel = int(map_size/grid_size)
+
+        for i in range(1, len(self.env.robot_pose_list), 1):
+            g_pose = self.env.robot_pose_list[i]
+            g_pose_pre = self.env.robot_pose_list[i-1]
+
+            x = g_pose[0] + g_map_shift
+            y = g_pose[1] + g_map_shift
+            col = int(g_map_pixel - y/grid_size)
+            row = int(g_map_pixel - x/grid_size)
+
+            x_pre = g_pose_pre[0] + g_map_shift
+            y_pre = g_pose_pre[1] + g_map_shift
+            col_pre = int(g_map_pixel - y_pre/grid_size)
+            row_pre = int(g_map_pixel - x_pre/grid_size)
+
+            cv2.line(path_img,(col_pre,row_pre),(col,row),255,5)
+
+
+        file_name = './path_' + str(index) + '.png'
+        cv2.imwrite(file_name, path_img)
+
     def evaluate_model(self, ep_num):
         goal_num = 0
         failed_num = 0
@@ -702,6 +730,7 @@ class Worker(object):
                 #     break                    
                 if done or step == max_step-1:
                     # print(test_num, info)
+                    # self.draw_path(test_num)
                     if info == 'goal':
                         goal_num += 1   
                     else:
@@ -718,9 +747,9 @@ class Worker(object):
         print('searching for failed ep', ep_num) 
         for test_num in range(100):
             count += 1
-            s = self.env.reset(0, 0, 1)
+            s = self.env.reset(0, 1, 1)
             for step in range(max_step):
-                a = self.ppo.choose_action(s, False)
+                a = self.ppo.choose_action(s, True)
                 s_, r_short, r_long, done, info = self.env.step(a)
 
                 s = s_
@@ -738,7 +767,7 @@ class Worker(object):
                     break
             if saved_ep > ep_num:
                 break
-        print (goal_num/count)
+        print ('end test_model',count)
 
     def work(self):
         global GLOBAL_EP, GLOBAL_RUNNING_R, GLOBAL_UPDATE_COUNTER \
@@ -746,7 +775,7 @@ class Worker(object):
             , Crash_states, Crash_count, Crash_return, Crash_buffer_full \
             , History_states, History_count, History_adv, History_return, History_buffer_full
 
-        self.env.save_ep()
+        # self.env.save_ep()
         if self.wid != 0:
             self.test_model(5)
         else:

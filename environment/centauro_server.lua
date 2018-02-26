@@ -49,6 +49,7 @@ function start()
     _obstacle_dynamic_hds = simGetCollectionObjects(_obstacle_dynamic_collection)
 
     _obs_hds = check_avaiable_obstacle_hds()
+    demo_obs_num = #_obs_hds + 2
 
     _current_tra = {}
     _current_ep = {}
@@ -176,18 +177,18 @@ end
 
 
 function save_start_end_ep(inInts,inFloats,inStrings,inBuffer)
-    if _save_ep and _g_save_ep == 1 then 
-        _failed_ep_history[_failed_ep_index] = _start_ep
-        _failed_ep_index = _failed_ep_index + 1
-        _failed_ep_index = _failed_ep_index % _max_history_length
+    -- if _save_ep and _g_save_ep == 1 then 
+    _failed_ep_history[_failed_ep_index] = _start_ep
+    _failed_ep_index = _failed_ep_index + 1
+    _failed_ep_index = _failed_ep_index % _max_history_length
 
-        -- local last_ep = convert_current_ep()
-        -- _failed_ep_history[_failed_ep_index] = last_ep
-        -- _failed_ep_index = _failed_ep_index + 1
-        -- _failed_ep_index = _failed_ep_index % _max_history_length
-        -- -- -- -- print('failed ep:', _failed_ep_index, #_failed_ep_history)
-        print ('    save start ep', _failed_ep_index, #_failed_ep_history)
-    end
+    -- local last_ep = convert_current_ep()
+    -- _failed_ep_history[_failed_ep_index] = last_ep
+    -- _failed_ep_index = _failed_ep_index + 1
+    -- _failed_ep_index = _failed_ep_index % _max_history_length
+    -- -- -- -- print('failed ep:', _failed_ep_index, #_failed_ep_history)
+    print ('    save start ep', _failed_ep_index, #_failed_ep_history)
+    -- end
 
     return {}, {}, {}, ''
 end
@@ -611,10 +612,17 @@ function restore_ep(ep, modifly)
     local target_params = params[3]
     
     -- obs
+    -- demo_obs_num = #obs_hds
+    demo_obs_num = demo_obs_num - 1
+    if demo_obs_num == 0 then 
+        demo_obs_num = #obs_hds + 1
+    end 
+    print(demo_obs_num)
     for i=1, #obs_hds, 1 do
         local param_index = i*2 - 1
         local obs_pos = obs_params[param_index]
         local obs_ori = obs_params[param_index+1]
+        print(i)
 
         -- if modifly > 0.5 then 
         --     obs_pos[1] = obs_pos[1] + (math.random() - 0.5) *2 * shift
@@ -631,6 +639,10 @@ function restore_ep(ep, modifly)
             obs_pos[2] = _bound_y
         elseif obs_pos[2] < -_bound_y  and  obs_pos[2] < 2.5 then 
             obs_pos[2] = -_bound_y
+        end
+
+        if i == demo_obs_num then 
+            obs_pos[1] = 3
         end
         simSetObjectPosition(obs_hds[i], -1, obs_pos)
         simSetObjectOrientation(obs_hds[i], -1, obs_ori)
