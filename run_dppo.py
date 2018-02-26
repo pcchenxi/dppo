@@ -15,20 +15,20 @@ import joblib, time
 import cv2
 
 EP_MAX = 500000
-EP_LEN = 80
-N_WORKER = 1               # parallel workers
+EP_LEN = 50
+N_WORKER = 7               # parallel workers
 GAMMA = 0.98                # reward discount factor
 LAM = 1
 A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0001               # learning rate for critic
 LR = 0.0001
 
-EP_BATCH_SIZE = 5
+EP_BATCH_SIZE = 10
 UPDATE_L_STEP = 30
-BATCH_SIZE = 10240
+BATCH_SIZE = 10000
 MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
 
-UPDATE_STEP = 5            # loop update operation n-steps
+UPDATE_STEP = 10            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
 GAME = 'Pendulum-v0'
 S_DIM, A_DIM = centauro_env.observation_space, centauro_env.action_space 
@@ -38,21 +38,21 @@ G_ITERATION = 0
 
 t_s = time.time()
 G_lift_s, G_straight_s, G_avoid_s, G_open_s = [], [], [], []
-# G_lift_s = joblib.load('./guided_tra/lift_s_test.pkl')
-# G_lift_a = joblib.load('./guided_tra/lift_a_test.pkl')
-# G_lift_ret = joblib.load('./guided_tra/lift_ret_test.pkl')
+G_lift_s = joblib.load('./guided_tra/lift_s_test.pkl')
+G_lift_a = joblib.load('./guided_tra/lift_a_test.pkl')
+G_lift_ret = joblib.load('./guided_tra/lift_ret_test.pkl')
 
-# G_straight_s = joblib.load('./guided_tra/straight_s.pkl')[:100000]
-# G_straight_a = joblib.load('./guided_tra/straight_a.pkl')[:100000]
-# G_straight_ret = joblib.load('./guided_tra/straight_ret.pkl')[:100000]
+G_straight_s = joblib.load('./guided_tra/straight_s.pkl')[:100000]
+G_straight_a = joblib.load('./guided_tra/straight_a.pkl')[:100000]
+G_straight_ret = joblib.load('./guided_tra/straight_ret.pkl')[:100000]
 
-# G_avoid_s = joblib.load('./guided_tra/avoid_s.pkl')
-# G_avoid_a = joblib.load('./guided_tra/avoid_a.pkl')
-# G_avoid_ret = joblib.load('./guided_tra/avoid_ret.pkl')
+G_avoid_s = joblib.load('./guided_tra/avoid_s.pkl')
+G_avoid_a = joblib.load('./guided_tra/avoid_a.pkl')
+G_avoid_ret = joblib.load('./guided_tra/avoid_ret.pkl')
 
-# G_open_s = joblib.load('./guided_tra/open_s.pkl')
-# G_open_a = joblib.load('./guided_tra/open_a.pkl')
-# G_open_ret = joblib.load('./guided_tra/open_ret.pkl')
+G_open_s = joblib.load('./guided_tra/open_s.pkl')
+G_open_a = joblib.load('./guided_tra/open_a.pkl')
+G_open_ret = joblib.load('./guided_tra/open_ret.pkl')
 
 print('loaded', len(G_lift_s), len(G_straight_s), len(G_avoid_s), len(G_open_s))
 print(time.time() - t_s)
@@ -123,7 +123,7 @@ class PPO(object):
         self.ratio = ratio
         self.grad_norm = _grad_norm
 
-        self.load_model()   
+        # self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')
@@ -136,9 +136,10 @@ class PPO(object):
 
     def write_summary(self, summary_name, value):
         summary = tf.Summary()
-        # summary.value.add(tag=summary_name, simple_value=float(value))
-        self.summary_writer.add_summary(summary, GLOBAL_EP)
+        summary.value.add(tag=summary_name, simple_value=float(value))
+        self.summary_writer.add_summary(summary, GLOBAL_STEP)
         self.summary_writer.flush()  
+        # print(value, GLOBAL_EP, 'summary')
 
     def shuffel_data(self, s, a, rs, rl, adv):
         index_shuffeled = np.random.choice(len(rs), len(rs), replace=False)
@@ -265,12 +266,12 @@ class PPO(object):
         size = 2560 #int(len(a)/4) #int(BATCH_SIZE*0.3)
         # selected_index = np.random.choice(len(G_lift_a), size, replace=False)
         # selected_index = np.random.randint(len(G_lift_a) - size - 1)
-        simi_threshold = 8
+        simi_threshold = 12
         print(len(a))
-        for index_s in range(0, len(s), 2):
+        for index_s in range(0, len(s), 3):
             sub_s = s[index_s]
             found_num = 0
-            for _ in range(600):
+            for _ in range(800):
                 index_lift = np.random.randint(len(G_lift_s))
                 index_straight = np.random.randint(len(G_straight_s))
                 index_open = np.random.randint(len(G_open_s))
@@ -396,8 +397,9 @@ class PPO(object):
             adv_s = (adv_s.flatten())
             adv_l = (adv_l.flatten())
             info = info.flatten()
-
-            # s, a, rs, rl, adv_s, adv_l, info = self.load_guid_tra(s, a, rs, rl, adv_s, adv_l, info)
+            ret_mean = rl.mean()
+            r_mean = adv_s.mean()
+            s, a, rs, rl, adv_s, adv_l, info = self.load_guid_tra(s, a, rs, rl, adv_s, adv_l, info)
 
             adv = adv_l*1
 
@@ -476,10 +478,10 @@ class PPO(object):
             self.write_summary('Loss/a loss', aloss) 
             self.write_summary('Loss/v loss', vloss) 
             self.write_summary('Loss/grad norm', grad_norm) 
-            self.write_summary('Loss/avg_rew', rl.mean()) 
-            # self.write_summary('Perf/mean_reward', np.mean(reward))  
+            self.write_summary('Perf/mean_ret', ret_mean)  
 
-            self.saver.save(self.sess, './model/rl/model.cptk') 
+            model_index = int(G_ITERATION / 10)
+            self.saver.save(self.sess, './model/rl/model_' + str(model_index) + '.cptk') 
 
             UPDATE_EVENT.clear()        # updating finished
             GLOBAL_UPDATE_COUNTER = 0   # reset counter
@@ -673,41 +675,56 @@ class Worker(object):
             else:
                 info_num.append(0)
         
-        return buffer_return_s, buffer_return_l, buffer_adv_s, buffer_adv_l, info_num
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        return buffer_return_s, buffer_return_l, buffer_rl, buffer_adv_l, info_num
 
     def evaluate_model(self, ep_num):
         goal_num = 0
+        goal_num_nocrash = 0
         failed_num = 0
 
         sum_reward = 0
+        sum_len = 0
         step_count = 0
 
         max_step = int(EP_LEN)
         print('evaluating model', ep_num) 
         for test_num in range(ep_num):
-            s = self.env.reset(0, 1, 1)
-            if test_num > 0 and test_num % 100 == 0:
-                print(test_num)
-                print ('success rate', goal_num/ep_num, 'failed rate', failed_num/ep_num, 'average reward', sum_reward/step_count)
+            s = self.env.reset(0, 0, 1)
+            crashed = False
+            tra_len = 0
+            # if test_num > 0 and test_num % 100 == 0:
+            #     print(test_num)
+            #     print ('success rate', goal_num/ep_num, 'failed rate', failed_num/ep_num, 'average reward', sum_reward/step_count)
             for step in range(max_step):
-                a = self.ppo.choose_action(s, True)
+                a = self.ppo.choose_action(s, False)
                 s_, r_short, r_long, done, info = self.env.step(a)
+                tra_len += 1
 
                 step_count += 1
                 sum_reward += r_long
                 s = s_
-                # if info == 'crash':
+                if info == 'crash':
+                    crashed = True
                 #     self.env.save_start_end_ep()
                 #     saved_ep += 1
                 #     break                    
                 if done or step == max_step-1:
                     # print(test_num, info)
+                    sum_len += tra_len
                     if info == 'goal':
                         goal_num += 1   
+                        if crashed == False:
+                            goal_num_nocrash += 1
                     else:
                         failed_num += 1  
                     break
 
+        self.ppo.write_summary('Perf/success_rate', goal_num/ep_num)  
+        self.ppo.write_summary('Perf/success_rate_nocrash', goal_num_nocrash/ep_num)  
+        self.ppo.write_summary('Perf/avg_reward', sum_reward/step_count)  
+        self.ppo.write_summary('Perf/avg_len', sum_len/ep_num)  
         print ('success rate', goal_num/ep_num, 'failed rate', failed_num/ep_num, 'average reward', sum_reward/step_count)
 
     def test_model(self, ep_num):
@@ -738,19 +755,64 @@ class Worker(object):
                     break
             if saved_ep > ep_num:
                 break
+
+        if saved_ep < ep_num:
+            for test_num in range(100):
+                count += 1
+                s = self.env.reset(0, 0, 1)
+                for step in range(max_step):
+                    a = self.ppo.choose_action(s, False)
+                    s_, r_short, r_long, done, info = self.env.step(a)
+
+                    s = s_
+                    if info == 'crash':
+                        self.env.save_start_end_ep()
+                        saved_ep += 1
+                        break                    
+                    if done or step == max_step-1:
+                        # print(test_num, info)
+                        if info != 'goal':
+                            self.env.save_start_end_ep()
+                            saved_ep += 1
+                        break
+                if saved_ep > ep_num:
+                    break
+
+        if saved_ep < ep_num:
+            for test_num in range(100):
+                count += 1
+                s = self.env.reset(0, 0, 1)
+                for step in range(max_step):
+                    a = self.ppo.choose_action(s, True)
+                    s_, r_short, r_long, done, info = self.env.step(a)
+
+                    s = s_
+                    if info == 'crash':
+                        self.env.save_start_end_ep()
+                        saved_ep += 1
+                        break                    
+                    if done or step == max_step-1:
+                        # print(test_num, info)
+                        if info != 'goal':
+                            self.env.save_start_end_ep()
+                            saved_ep += 1
+                        break
+                if saved_ep > ep_num:
+                    break
         print (goal_num/count)
 
     def work(self):
-        global GLOBAL_EP, GLOBAL_RUNNING_R, GLOBAL_UPDATE_COUNTER \
+        global GLOBAL_EP, GLOBAL_STEP, GLOBAL_RUNNING_R, GLOBAL_UPDATE_COUNTER \
             , Goal_states, Goal_count, Goal_return, Goal_buffer_full \
             , Crash_states, Crash_count, Crash_return, Crash_buffer_full \
             , History_states, History_count, History_adv, History_return, History_buffer_full
 
-        self.env.save_ep()
+        # self.env.save_ep()
         if self.wid != 0:
             self.test_model(5)
-        else:
-            self.evaluate_model(1000)
+        if self.wid == 0:
+            while not COORD.should_stop():
+                self.evaluate_model(50)
         # for _ in range(2):
         #     s = self.env.reset( 0, 0, 1)
         #     self.env.save_ep()
@@ -784,6 +846,8 @@ class Worker(object):
                 # self.ppo.get_action_prob(s)
                 s_, r_short, r_long, done, info = self.env.step(a)
                 vpred_s, vpred_l = self.ppo.get_v(s)
+
+                GLOBAL_STEP += 1
 
                 # img = self.ppo.sess.run(self.ppo.img, feed_dict = {self.ppo.tfs:[s]})[0]
                 # plt.clf()
@@ -859,7 +923,7 @@ if __name__ == '__main__':
     ROLLING_EVENT.set()             # start to roll out
     workers = [Worker(wid=i) for i in range(N_WORKER)]
     
-    GLOBAL_UPDATE_COUNTER, GLOBAL_EP = 0, 1
+    GLOBAL_UPDATE_COUNTER, GLOBAL_EP, GLOBAL_STEP = 0, 1, 1
 
     GLOBAL_RUNNING_R = []
     COORD = tf.train.Coordinator()

@@ -53,7 +53,7 @@ action_type = spaces.Discrete(action_space)
 
 REWARD_GOAL = 1
 REWARD_STEP =  -0.1
-REWARD_CRASH = -0.05
+REWARD_CRASH = -0.1
 
 class Simu_env():
     def __init__(self, port_num):
