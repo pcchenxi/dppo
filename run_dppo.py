@@ -38,21 +38,21 @@ G_ITERATION = 0
 
 t_s = time.time()
 G_lift_s, G_straight_s, G_avoid_s, G_open_s = [], [], [], []
-G_lift_s = joblib.load('./guided_tra/lift_s_test.pkl')
-G_lift_a = joblib.load('./guided_tra/lift_a_test.pkl')
-G_lift_ret = joblib.load('./guided_tra/lift_ret_test.pkl')
+# G_lift_s = joblib.load('./guided_tra/lift_s_test.pkl')
+# G_lift_a = joblib.load('./guided_tra/lift_a_test.pkl')
+# G_lift_ret = joblib.load('./guided_tra/lift_ret_test.pkl')
 
-G_straight_s = joblib.load('./guided_tra/straight_s.pkl')[:100000]
-G_straight_a = joblib.load('./guided_tra/straight_a.pkl')[:100000]
-G_straight_ret = joblib.load('./guided_tra/straight_ret.pkl')[:100000]
+# G_straight_s = joblib.load('./guided_tra/straight_s.pkl')[:100000]
+# G_straight_a = joblib.load('./guided_tra/straight_a.pkl')[:100000]
+# G_straight_ret = joblib.load('./guided_tra/straight_ret.pkl')[:100000]
 
-G_avoid_s = joblib.load('./guided_tra/avoid_s.pkl')
-G_avoid_a = joblib.load('./guided_tra/avoid_a.pkl')
-G_avoid_ret = joblib.load('./guided_tra/avoid_ret.pkl')
+# G_avoid_s = joblib.load('./guided_tra/avoid_s.pkl')
+# G_avoid_a = joblib.load('./guided_tra/avoid_a.pkl')
+# G_avoid_ret = joblib.load('./guided_tra/avoid_ret.pkl')
 
-G_open_s = joblib.load('./guided_tra/open_s.pkl')
-G_open_a = joblib.load('./guided_tra/open_a.pkl')
-G_open_ret = joblib.load('./guided_tra/open_ret.pkl')
+# G_open_s = joblib.load('./guided_tra/open_s.pkl')
+# G_open_a = joblib.load('./guided_tra/open_a.pkl')
+# G_open_ret = joblib.load('./guided_tra/open_ret.pkl')
 
 print('loaded', len(G_lift_s), len(G_straight_s), len(G_avoid_s), len(G_open_s))
 print(time.time() - t_s)
@@ -123,7 +123,7 @@ class PPO(object):
         self.ratio = ratio
         self.grad_norm = _grad_norm
 
-        self.load_model()   
+        # self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')
@@ -480,7 +480,7 @@ class PPO(object):
             self.write_summary('Loss/grad norm', grad_norm) 
             self.write_summary('Perf/mean_ret', ret_mean)  
 
-            model_index = int(G_ITERATION / 10)
+            model_index = int(GLOBAL_STEP / (BATCH_SIZE*5))
             self.saver.save(self.sess, './model/rl/model_' + str(model_index) + '.cptk') 
 
             UPDATE_EVENT.clear()        # updating finished
@@ -923,7 +923,7 @@ if __name__ == '__main__':
     ROLLING_EVENT.set()             # start to roll out
     workers = [Worker(wid=i) for i in range(N_WORKER)]
     
-    GLOBAL_UPDATE_COUNTER, GLOBAL_EP, GLOBAL_STEP = 0, 1, 1212000
+    GLOBAL_UPDATE_COUNTER, GLOBAL_EP, GLOBAL_STEP = 0, 1, 1
 
     GLOBAL_RUNNING_R = []
     COORD = tf.train.Coordinator()
