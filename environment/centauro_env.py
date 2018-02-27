@@ -293,7 +293,7 @@ class Simu_env():
             self.goal_counter = 0
 
         # if abs(robot_state[1]) > 0.2 or abs(robot_state[2]) > 3: # or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
-        if abs(robot_state[1]) > 0.2 or robot_state[2] < -0.6:
+        if abs(robot_state[1]) > 0.15 or robot_state[2] < -0.6:
         # if dist > 2:
             is_finish = True
             reward_short = -1

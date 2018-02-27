@@ -401,7 +401,7 @@ function sample_new_ep()
 
     local robot_pos = {}
     robot_pos[1] = 0 --(math.random() - 0.5) * 2 * 0.5
-    robot_pos[2] = (math.random() - 1) * 0.1 - 0.5
+    robot_pos[2] = (math.random() - 1) * 0.05 - 0.5
     robot_pos[3] = _start_pos[3]
 
     local robot_ori = {}
@@ -415,7 +415,7 @@ function sample_new_ep()
     -- end
 
     local target_pos = {}
-    target_pos[1] = (math.random() - 0.5) *2 * 0.15
+    target_pos[1] = (math.random() - 0.5) *2 * 0.1
     target_pos[2] = (math.random()-0.5) + 0.3 --math.random() * _target_dist --* global_counter/20000
     if target_pos[2] > 0.4 then 
         target_pos[2] = 0.4
@@ -449,7 +449,7 @@ function sample_new_ep()
     if special > -1 then 
         local skip = 0
         local obs_pos = {}
-        global_counter = 1
+        global_counter = 2
         if global_counter == 1 then 
             obs_index = 2
         elseif global_counter == 2 then  
@@ -465,7 +465,7 @@ function sample_new_ep()
         if skip == 0 then 
             print(obs_index, global_counter, #_obs_hds)
             local obs_pos_before =  simGetObjectPosition(_obs_hds[obs_index], -1)
-            obs_pos[1] = (math.random() - 0.5)*2 * 0.1
+            obs_pos[1] = (math.random() - 0.5)*2 * 0.05
             -- obs_pos[1] = math.random(3) * 0.25 - 0.5
             obs_pos[2] = 0 --(math.random() - 0.5)*2 * 0.4
             obs_pos[3] = obs_pos_before[3]

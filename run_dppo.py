@@ -16,7 +16,7 @@ import cv2
 
 EP_MAX = 500000
 EP_LEN = 50
-N_WORKER = 4               # parallel workers
+N_WORKER = 7               # parallel workers
 GAMMA = 0.98                # reward discount factor
 LAM = 1
 A_LR = 0.0001               # learning rate for actor
@@ -25,7 +25,7 @@ LR = 0.0001
 
 EP_BATCH_SIZE = 10
 UPDATE_L_STEP = 30
-BATCH_SIZE = 5000
+BATCH_SIZE = 4000
 MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
 
 UPDATE_STEP = 10            # loop update operation n-steps
