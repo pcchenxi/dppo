@@ -16,7 +16,7 @@ import cv2
 
 EP_MAX = 500000
 EP_LEN = 50
-N_WORKER = 7               # parallel workers
+N_WORKER = 4               # parallel workers
 GAMMA = 0.98                # reward discount factor
 LAM = 1
 A_LR = 0.0001               # learning rate for actor
@@ -25,7 +25,7 @@ LR = 0.0001
 
 EP_BATCH_SIZE = 10
 UPDATE_L_STEP = 30
-BATCH_SIZE = 10000
+BATCH_SIZE = 5000
 MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
 
 UPDATE_STEP = 10            # loop update operation n-steps
@@ -38,21 +38,21 @@ G_ITERATION = 0
 
 t_s = time.time()
 G_lift_s, G_straight_s, G_avoid_s, G_open_s = [], [], [], []
-G_lift_s = joblib.load('./guided_tra/lift_s_test.pkl')
-G_lift_a = joblib.load('./guided_tra/lift_a_test.pkl')
-G_lift_ret = joblib.load('./guided_tra/lift_ret_test.pkl')
+# G_lift_s = joblib.load('./guided_tra/lift_s_test.pkl')
+# G_lift_a = joblib.load('./guided_tra/lift_a_test.pkl')
+# G_lift_ret = joblib.load('./guided_tra/lift_ret_test.pkl')
 
-G_straight_s = joblib.load('./guided_tra/straight_s.pkl')[:100000]
-G_straight_a = joblib.load('./guided_tra/straight_a.pkl')[:100000]
-G_straight_ret = joblib.load('./guided_tra/straight_ret.pkl')[:100000]
+# G_straight_s = joblib.load('./guided_tra/straight_s.pkl')[:100000]
+# G_straight_a = joblib.load('./guided_tra/straight_a.pkl')[:100000]
+# G_straight_ret = joblib.load('./guided_tra/straight_ret.pkl')[:100000]
 
-G_avoid_s = joblib.load('./guided_tra/avoid_s.pkl')
-G_avoid_a = joblib.load('./guided_tra/avoid_a.pkl')
-G_avoid_ret = joblib.load('./guided_tra/avoid_ret.pkl')
+# G_avoid_s = joblib.load('./guided_tra/avoid_s.pkl')
+# G_avoid_a = joblib.load('./guided_tra/avoid_a.pkl')
+# G_avoid_ret = joblib.load('./guided_tra/avoid_ret.pkl')
 
-G_open_s = joblib.load('./guided_tra/open_s.pkl')
-G_open_a = joblib.load('./guided_tra/open_a.pkl')
-G_open_ret = joblib.load('./guided_tra/open_ret.pkl')
+# G_open_s = joblib.load('./guided_tra/open_s.pkl')
+# G_open_a = joblib.load('./guided_tra/open_a.pkl')
+# G_open_ret = joblib.load('./guided_tra/open_ret.pkl')
 
 print('loaded', len(G_lift_s), len(G_straight_s), len(G_avoid_s), len(G_open_s))
 print(time.time() - t_s)
@@ -123,7 +123,7 @@ class PPO(object):
         self.ratio = ratio
         self.grad_norm = _grad_norm
 
-        self.load_model()   
+        # self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')
@@ -495,7 +495,7 @@ class PPO(object):
                 s_all, a_all, rs_all, rl_all, adv_s_all, adv_l_all = [], [], [], [], [], []
                 print('reset')
 
-            if entropy < 1:         # stop training
+            if entropy < 1.5:         # stop training
                 COORD.request_stop()
 
 
@@ -808,8 +808,8 @@ class Worker(object):
             , History_states, History_count, History_adv, History_return, History_buffer_full
 
         # self.env.save_ep()
-        if self.wid != 0:
-            self.test_model(5)
+        # if self.wid != 0:
+        #     self.test_model(5)
         if self.wid == 0:
             while not COORD.should_stop():
                 self.evaluate_model(50)
@@ -839,7 +839,7 @@ class Worker(object):
                     buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
                     # if update_counter%1 == 0:
                         # self.env.clear_history()
-                    self.test_model(5)
+                    # self.test_model(5)
                     update_counter += 1
 
                 a = self.ppo.choose_action(s, False)
@@ -923,7 +923,7 @@ if __name__ == '__main__':
     ROLLING_EVENT.set()             # start to roll out
     workers = [Worker(wid=i) for i in range(N_WORKER)]
     
-    GLOBAL_UPDATE_COUNTER, GLOBAL_EP, GLOBAL_STEP = 0, 1, 1212000
+    GLOBAL_UPDATE_COUNTER, GLOBAL_EP, GLOBAL_STEP = 0, 1, 1
 
     GLOBAL_RUNNING_R = []
     COORD = tf.train.Coordinator()

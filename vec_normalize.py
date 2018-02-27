@@ -43,7 +43,7 @@ class VecNormalize(object):
     def _obfilt(self, obs):
         if self.ob_rms: 
             ob_state = obs[-4:]
-            self.ob_rms.update(ob_state)
+            # self.ob_rms.update(ob_state)
             ob_state = np.clip((ob_state - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + self.epsilon), -self.clipob, self.clipob)
             obs[-4:] = ob_state
             return obs
@@ -97,6 +97,8 @@ class RunningMeanStd(object):
         self.var = np.zeros(shape, 'float64')
         self.count = epsilon
 
+        self.mean = np.array([0.05, 0.05, 0.05, 0.05])
+        self.var = np.array([0.1, 0.1, 0.1, 0.1])
 
     def update(self, x):
         batch_mean = np.mean(x, axis=0)
