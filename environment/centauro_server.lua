@@ -12,8 +12,8 @@ require("robot_control")
 -- simExtRemoteApiStart(19999)
 
 _obs_mode = 'random' --'near'
-_bound_x = 1.5
-_bound_y = 1.5
+_bound_x = 1.2
+_bound_y = 1.2
 
 _init_target_dist = 0.2
 _target_dist = _init_target_dist
@@ -313,8 +313,8 @@ function generate_path()
     print ('path found ', #path)
     -- displayInfo('finish 1 '..#path)
 
-    for i=1, 30, 1 do 
-        applyPath(task_hd, path, 0.1)
+    for i=1, 1, 1 do 
+        applyPath(task_hd, path, 0)
     end
     simExtOMPL_destroyTask(task_hd)
 
@@ -347,7 +347,7 @@ end
 
 function sample_obstacle_position()
     local visable_count = 0
-    local max_count = 0 --math.random(8)
+    local max_count = math.random(12)
     local start = math.random(#_obs_hds)
     for i=start, start + #_obs_hds, 1 do
         local visable = math.random()
@@ -358,8 +358,8 @@ function sample_obstacle_position()
             if _obs_mode == 'random' then      
                 -- obs_pos[1] = (math.random()-0.5)*2 * 0.5
                 local side = math.random()
-                obs_pos[1] = math.random(4) * 0.5 - 1  --(math.random()-0.5)*2 * 0.8
-                obs_pos[2] = math.random(4) * 0.5 - 1 --(math.random()-0.5)*2 * 1       
+                obs_pos[1] = math.random(8) * 0.25 - 1  --(math.random()-0.5)*2 * 0.8
+                obs_pos[2] = math.random(4) * 0.25 - 1 --(math.random()-0.5)*2 * 1       
                 -- if side < 0.5 then 
                 --     obs_pos[1] = obs_pos[1] - 0.6
                 -- else
@@ -401,7 +401,7 @@ function sample_new_ep()
 
     local robot_pos = {}
     robot_pos[1] = 0 --(math.random() - 0.5) * 2 * 0.5
-    robot_pos[2] = (math.random() - 1) * 0.1 - 0.5
+    robot_pos[2] = -0.5 --(math.random() - 1) * 0.05 - 0.5
     robot_pos[3] = _start_pos[3]
 
     local robot_ori = {}
@@ -415,11 +415,11 @@ function sample_new_ep()
     -- end
 
     local target_pos = {}
-    target_pos[1] = (math.random() - 0.5) *2 * 0.15
-    target_pos[2] = (math.random()-0.5) + 0.3 --math.random() * _target_dist --* global_counter/20000
-    if target_pos[2] > 0.4 then 
-        target_pos[2] = 0.4
-    end
+    target_pos[1] = (math.random() - 0.5) *2 * 0.1
+    target_pos[2] = 1.2 -- math.random()/2 + 0.2 --math.random() * _target_dist --* global_counter/20000
+    -- if target_pos[2] > 0.5 then 
+    --     target_pos[2] = 0.5
+    -- end
     target_pos[3] = _start_t_pos[3] --(math.random() - 0.5) * 2 * 0.1 + 0.4
 
     -- if special > 0.2 then 
@@ -449,14 +449,14 @@ function sample_new_ep()
     if special > -1 then 
         local skip = 0
         local obs_pos = {}
-        global_counter = 1
+        -- global_counter = 2
         if global_counter == 1 then 
             obs_index = 2
         elseif global_counter == 2 then  
             obs_index = 4
         elseif global_counter == 3 then  
             obs_index = 6
-            -- global_counter = 0
+            global_counter = 0
         else 
             global_counter = 0
             skip = 1
@@ -465,7 +465,7 @@ function sample_new_ep()
         if skip == 0 then 
             print(obs_index, global_counter, #_obs_hds)
             local obs_pos_before =  simGetObjectPosition(_obs_hds[obs_index], -1)
-            obs_pos[1] = (math.random() - 0.5)*2 * 0.1
+            obs_pos[1] = (math.random() - 0.5)*2 * 0.05
             -- obs_pos[1] = math.random(3) * 0.25 - 0.5
             obs_pos[2] = 0 --(math.random() - 0.5)*2 * 0.4
             obs_pos[3] = obs_pos_before[3]
@@ -838,7 +838,15 @@ global_counter = 0
 
 start()
 _current_ep = convert_current_ep() 
--- generate_path()
+for i=1, 10, 1 do
+    sample_new_ep()
+    simSwitchThread()
+
+    local st = os.time()
+    generate_path()
+    print('time:',os.time() - st)
+    simSwitchThread()
+end
 -- sample_ep(1.5)
 
 -- for i=1, #_joint_hds, 1 do
@@ -849,6 +857,13 @@ _current_ep = convert_current_ep()
 -- simSwitchThread()
 -- end 
 
+-- geting camera data
+-- if (sim_call_type==sim_childscriptcall_sensing) then 
+--     r=simGetVisionSensorImage(depthCam)
+--     resolution = simGetVisionSensorResolution(depthCam)
+--     print(#r)
+--     print(r[100000], r[100001], r[100002], r[600000], r[600001], r[600002])
+-- end
 
 while simGetSimulationState()~=sim_simulation_advancing_abouttostop do
     -- do something in here
