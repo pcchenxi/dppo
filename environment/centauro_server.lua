@@ -24,12 +24,11 @@ _modifly_prob = 0
 function start()
     -- sleep (3)
     -- print('reset')
-    _head_check_hd = simGetObjectHandle('head_check')
-
     _fake_robot_hd = simGetObjectHandle('fake_robot')
     _robot_hd = simGetObjectHandle('centauro')
     _target_hd = simGetObjectHandle('target')
     _joint_hds = get_joint_hds(24)
+    _mode = simGetModelProperty(_robot_hd)
 
     _start_pos = simGetObjectPosition(_robot_hd, -1)
     _start_ori = simGetObjectOrientation(_robot_hd,-1)
@@ -107,34 +106,42 @@ end
 function reset(inInts,inFloats,inStrings,inBuffer)
     global_counter = global_counter + 1
 
-    local radius = inFloats[1]
-    _init_target_dist = radius
-    local env_mode = inFloats[2] --   0: random environment   1: target environment 
-    local reset_mode = inFloats[3] 
-    --   0: pure random ep        1: allow replay buffer    2: continue... only change target position   3: play by user  4: close to goal  5: after collide 
-    _g_save_ep = inFloats[4]
-    -- print ('reset', env_mode, reset_mode)
+    simSetModelProperty(robot_hd, 32)
+    reset_joint(_joint_hds)
+    set_joint_values(_joint_hds, _start_joint_values)
+    simSetObjectPosition(robot_hd, -1, _start_pos)
+    simSetObjectOrientation(robot_hd, -1, _start_ori)
+    sleep(1)
+    simSetModelProperty(robot_hd, _mode)
 
-    if reset_mode == 4 then 
-        _target_dist = 0.0
-    else 
-        _target_dist = _init_target_dist
-    end
+    -- local radius = inFloats[1]
+    -- _init_target_dist = radius
+    -- local env_mode = inFloats[2] --   0: random environment   1: target environment 
+    -- local reset_mode = inFloats[3] 
+    -- --   0: pure random ep        1: allow replay buffer    2: continue... only change target position   3: play by user  4: close to goal  5: after collide 
+    -- _g_save_ep = inFloats[4]
+    -- -- print ('reset', env_mode, reset_mode)
 
-    if env_mode == 0 then 
-        sample_ep(radius, reset_mode)  -- small random env
-    elseif env_mode == 1 and reset_mode ~= 3 then
-        sample_ep_fixenv(radius, reset_mode) -- initial scene
-    elseif reset_mode == 3 then
-        sample_ep_userplay(env_mode, reset_mode)
-    end
-    local robot_pos = simGetObjectPosition(_robot_hd, -1)
-    _center_x = robot_pos[1]
-    _center_y = robot_pos[2]   
+    -- if reset_mode == 4 then 
+    --     _target_dist = 0.0
+    -- else 
+    --     _target_dist = _init_target_dist
+    -- end
 
-    _current_ep = convert_current_ep()
-    _current_tra = {}      
-    _current_tra[1] = _current_ep
+    -- if env_mode == 0 then 
+    --     sample_ep(radius, reset_mode)  -- small random env
+    -- elseif env_mode == 1 and reset_mode ~= 3 then
+    --     sample_ep_fixenv(radius, reset_mode) -- initial scene
+    -- elseif reset_mode == 3 then
+    --     sample_ep_userplay(env_mode, reset_mode)
+    -- end
+    -- local robot_pos = simGetObjectPosition(_robot_hd, -1)
+    -- _center_x = robot_pos[1]
+    -- _center_y = robot_pos[2]   
+
+    -- _current_ep = convert_current_ep()
+    -- _current_tra = {}      
+    -- _current_tra[1] = _current_ep
     return {}, {}, {}, ''
 end
 
@@ -267,15 +274,17 @@ end
 function get_target_state(inInts,inFloats,inStrings,inBuffer)
     local target_pos =simGetObjectPosition(_target_hd, _robot_hd)
     return {}, {target_pos[1], target_pos[2]}, {}, ''
+end
 
 function get_robot_position(inInts,inFloats,inStrings,inBuffer)
     local pos =simGetObjectPosition(_robot_hd,-1)    
     return {}, {pos[1], pos[2]}, {}, ''
+end
 
 function get_robot_state(inInts,inFloats,inStrings,inBuffer)  
     local joint_pose = get_joint_pos_vel(_joint_hds)
     return {}, joint_pose, {}, ''
-
+end
 
 function generate_path()
     init_params(2, 8, 'centauro', 'obstacle_all', true)
@@ -809,16 +818,6 @@ global_counter = 0
 
 start()
 _current_ep = convert_current_ep() 
-for i=1, 10, 1 do
-    sample_new_ep()
-    simSwitchThread()
-
-    local st = os.time()
-    generate_path()
-    print('time:',os.time() - st)
-    simSwitchThread()
-end
--- sample_ep(1.5)
 
 -- for i=1, #_joint_hds, 1 do
 -- local hd = _joint_hds[5]
@@ -840,7 +839,3 @@ while simGetSimulationState()~=sim_simulation_advancing_abouttostop do
     -- do something in here
     -- simSwitchThread()
 end
-
-
-
-
