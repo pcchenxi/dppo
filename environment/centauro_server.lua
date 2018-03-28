@@ -25,11 +25,11 @@ function start()
     -- sleep (3)
     -- print('reset')
     _head_check_hd = simGetObjectHandle('head_check')
+
     _fake_robot_hd = simGetObjectHandle('fake_robot')
     _robot_hd = simGetObjectHandle('centauro')
-    _robot_body_hd = simGetObjectHandle('body_ref')
     _target_hd = simGetObjectHandle('target')
-    _joint_hds = get_joint_hds(16)
+    _joint_hds = get_joint_hds(24)
 
     _start_pos = simGetObjectPosition(_robot_hd, -1)
     _start_ori = simGetObjectOrientation(_robot_hd,-1)
@@ -138,13 +138,27 @@ function reset(inInts,inFloats,inStrings,inBuffer)
     return {}, {}, {}, ''
 end
 
-function step(inInts,inFloats,inStrings,inBuffer)
+function step(inInts,actions,inStrings,inBuffer)
     -- print('step')
-    _pre_ep = convert_current_ep()
-    res = do_action_rl(_robot_hd, inFloats)
-    _current_ep = convert_current_ep()
-    _current_tra[#_current_tra+1] = _current_ep
-    return {}, {}, {}, res
+    -- _pre_ep = convert_current_ep()
+    -- res = do_action_rl(_robot_hd, inFloats)
+    -- _current_ep = convert_current_ep()
+    -- _current_tra[#_current_tra+1] = _current_ep
+    for i=1, #_joint_hds, 1 do
+        local hd = _joint_hds[i]
+        simSetJointTargetVelocity(hd, 5*actions[i])
+        --simSetJointForce(hd, 100)
+    end 
+    -- check collision
+    local res, data = simCheckDistance(_collection_robot_hd, _collection_hd, 0.05)
+    if data ~= nil then 
+        res = 'c'
+    else
+        res = 't'
+    end
+
+    joint_pose = get_joint_pos_vel(_joint_hds)
+    return {}, joint_pose, {}, res
 end
 
 function get_robot_gpose(inInts,inFloats,inStrings,inBuffer)
@@ -250,61 +264,18 @@ function get_obstacle_info(inInts,inFloats,inStrings,inBuffer)
     return {}, obs_info, {}, ''
 end
 
-function get_robot_state(inInts,inFloats,inStrings,inBuffer)
+function get_target_state(inInts,inFloats,inStrings,inBuffer)
     local target_pos =simGetObjectPosition(_target_hd, _robot_hd)
-    local target_ori =simGetObjectPosition(_target_hd, _robot_hd)
+    return {}, {target_pos[1], target_pos[2]}, {}, ''
 
-    local pos =simGetObjectPosition(_robot_hd,-1)
-    local ori =simGetObjectOrientation(_robot_hd,-1)
-    -- local joint_pose = get_joint_values(_joint_hds)
-    local leg_l = get_current_l(_robot_hd)
-    local diff_x = math.abs(_center_x - pos[1])
-    local diff_y = math.abs(_center_y - pos[2])
-    local dist_to_center = math.sqrt(pos[1]*pos[1] + pos[2]*pos[2])
-    -- local dist_to_center = math.sqrt(diff_x*diff_x + diff_y*diff_y)
+function get_robot_position(inInts,inFloats,inStrings,inBuffer)
+    local pos =simGetObjectPosition(_robot_hd,-1)    
+    return {}, {pos[1], pos[2]}, {}, ''
 
-    local state = {}
-    local target_angle = math.atan2(target_pos[1], target_pos[2])
-    local target_dist = math.sqrt(target_pos[1]*target_pos[1] + target_pos[2]*target_pos[2])
+function get_robot_state(inInts,inFloats,inStrings,inBuffer)  
+    local joint_pose = get_joint_pos_vel(_joint_hds)
+    return {}, joint_pose, {}, ''
 
-    state[1] = target_dist
-    -- state[2] = dist_to_center
-    state[2] = pos[1]
-    state[3] = pos[2]
-    state[4] = target_pos[1]
-    state[5] = target_pos[2]  --(target_dist/(_target_dist*2)-0.5) * 2
-    -- state[3] = target_ori[3]
-    -- state[4] = target_pos[3] - 0.4
-    -- state[5] = _pre_target_l
-
-    local target_pos_head =simGetObjectPosition(_target_hd, _head_check_hd)
-    state[#state+1] = target_pos_head[1]
-    state[#state+1] = target_pos_head[2]
-    state[#state+1] = target_pos_head[3]
-
-    local min_dist = 999
-    for i=1, #_obs_hds, 1 do 
-        local obs_pos = simGetObjectPosition(_obs_hds[i], _head_check_hd)
-        local obs_pos_g = simGetObjectPosition(_obs_hds[i], -1)
-                        
-        state[#state+1] = obs_pos[1]
-        state[#state+1] = obs_pos[2]
-        state[#state+1] = obs_pos[3]
-        state[#state+1] = obs_pos_g[3]
-    end
-    -- state[#state+1] = ori[3]
-    state[#state+1] = pos[3]
-    state[#state+1] = leg_l
-
-    local threshold = 0.3
-    local res, data = simCheckDistance(_collection_robot_hd, _collection_hd, threshold)
-    local dist = threshold
-    if data ~= nil then 
-        dist = data[7]
-    end
-    state[#state+1] = dist
-    return {}, state, {}, ''
-end
 
 function generate_path()
     init_params(2, 8, 'centauro', 'obstacle_all', true)

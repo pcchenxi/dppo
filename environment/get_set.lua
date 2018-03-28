@@ -53,6 +53,42 @@ function get_joint_values(joint_hds)
     return joint_values
 end
 
+function get_joint_velocities(joint_hds)
+    local joint_velocities = {}
+    for i=1, #joint_hds, 1 do
+        _, joint_velocities[i] = simGetObjectFloatParameter(joint_hds[i], 2012)
+    end 
+    return joint_velocities
+end 
+
+function get_joint_forces(joint_hds)
+    local joint_forces = {}
+    for i=1, #joint_hds, 1 do
+        joint_forces[i] = simGetJointForce(joint_hds[i])
+    end 
+    return joint_forces
+end 
+
+function reset_joint(joint_hds)
+    for i=1, #joint_hds, 1 do
+        simSetJointTargetVelocity(joint_hds[i], 0)
+        -- simGetObjectFloatParameter(joint_hds[i], force[i])
+    end 
+end 
+
+function get_joint_pos_vel(joint_hds)
+    local joint_pos_vels = {}
+    for i=1, #joint_hds, 1 do
+        joint_pos_vels[i] = simGetJointPosition(joint_hds[i])
+    end     
+
+    for i=1, #joint_hds, 1 do
+        _, joint_pos_vels[#joint_hds + i] = simGetObjectFloatParameter(hd, 2012)
+    end 
+    return joint_pos_vels
+end 
+
+
 set_joint_values = function(joint_hds, joint_values)
     for i=1, #joint_hds, 1 do
         res = simSetJointPosition(joint_hds[i], joint_values[i])
