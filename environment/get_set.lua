@@ -20,10 +20,15 @@ function get_joint_hds(joint_num)
     local hd4_3=simGetObjectHandle('ankle_pitch_3')
     local hd4_4=simGetObjectHandle('ankle_pitch_4')
 
-    local hd5_1=simGetObjectHandle('j_wheel_1')
-    local hd5_2=simGetObjectHandle('j_wheel_2')
-    local hd5_3=simGetObjectHandle('j_wheel_3')
-    local hd5_4=simGetObjectHandle('j_wheel_4')
+    local hd5_1=simGetObjectHandle('ankle_yaw_1')
+    local hd5_2=simGetObjectHandle('ankle_yaw_2')
+    local hd5_3=simGetObjectHandle('ankle_yaw_3')
+    local hd5_4=simGetObjectHandle('ankle_yaw_4')    
+
+    local hd6_1=simGetObjectHandle('j_wheel_1')
+    local hd6_2=simGetObjectHandle('j_wheel_2')
+    local hd6_3=simGetObjectHandle('j_wheel_3')
+    local hd6_4=simGetObjectHandle('j_wheel_4')
 
     joint_hds = {}
     if joint_num == 8 then
@@ -32,8 +37,10 @@ function get_joint_hds(joint_num)
         joint_hds = {hd2_1,hd2_2,hd2_3,hd2_4, hd3_1,hd3_2,hd3_3,hd3_4, hd4_1,hd4_2,hd4_3,hd4_4}
     elseif joint_num == 16 then 
         joint_hds={hd1_1,hd1_2,hd1_3,hd1_4, hd2_1,hd2_2,hd2_3,hd2_4, hd3_1,hd3_2,hd3_3,hd3_4, hd4_1,hd4_2,hd4_3,hd4_4}
-
-        -- joint_hds={hd1_1,hd1_2,hd1_3,hd1_4, hd2_1,hd2_2,hd2_3,hd2_4, hd3_1,hd3_2,hd3_3,hd3_4, hd4_1,hd4_2,hd4_3,hd4_4, hd5_1,hd5_2,hd5_3,hd5_4}
+    elseif joint_num == 20 then 
+        joint_hds={hd1_1,hd1_2,hd1_3,hd1_4, hd2_1,hd2_2,hd2_3,hd2_4, hd3_1,hd3_2,hd3_3,hd3_4, hd4_1,hd4_2,hd4_3,hd4_4, hd5_1,hd5_2,hd5_3,hd5_4}
+    else 
+        joint_hds={hd1_1,hd1_2,hd1_3,hd1_4, hd2_1,hd2_2,hd2_3,hd2_4, hd3_1,hd3_2,hd3_3,hd3_4, hd4_1,hd4_2,hd4_3,hd4_4, hd5_1,hd5_2,hd5_3,hd5_4, hd6_1,hd6_2,hd6_3,hd6_4}
     end
     return joint_hds
 end
@@ -45,6 +52,42 @@ function get_joint_values(joint_hds)
     end
     return joint_values
 end
+
+function get_joint_velocities(joint_hds)
+    local joint_velocities = {}
+    for i=1, #joint_hds, 1 do
+        _, joint_velocities[i] = simGetObjectFloatParameter(joint_hds[i], 2012)
+    end 
+    return joint_velocities
+end 
+
+function get_joint_forces(joint_hds)
+    local joint_forces = {}
+    for i=1, #joint_hds, 1 do
+        joint_forces[i] = simGetJointForce(joint_hds[i])
+    end 
+    return joint_forces
+end 
+
+function reset_joint(joint_hds)
+    for i=1, #joint_hds, 1 do
+        simSetJointTargetVelocity(joint_hds[i], 0)
+        -- simGetObjectFloatParameter(joint_hds[i], force[i])
+    end 
+end 
+
+function get_joint_pos_vel(joint_hds)
+    local joint_pos_vels = {}
+    for i=1, #joint_hds, 1 do
+        joint_pos_vels[i] = simGetJointPosition(joint_hds[i])
+    end     
+
+    for i=1, #joint_hds, 1 do
+        _, joint_pos_vels[#joint_hds + i] = simGetObjectFloatParameter(hd, 2012)
+    end 
+    return joint_pos_vels
+end 
+
 
 set_joint_values = function(joint_hds, joint_values)
     for i=1, #joint_hds, 1 do
@@ -119,8 +162,8 @@ function get_state_hl(hd, base_dim)
     local hip_pos =simGetObjectPosition(hip_hd, robot_hd)
     local ankle_pos =simGetObjectPosition(ankle_hd, robot_hd)
 
-    state[#state+1] = pos[3]
-    state[#state+1] = ankle_pos[1] - hip_pos[1]
+    state[#state+1] = 0 --pos[3]
+    state[#state+1] = 0.1 --ankle_pos[1] - hip_pos[1]
 
     return state
 end

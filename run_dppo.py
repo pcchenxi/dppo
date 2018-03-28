@@ -15,6 +15,7 @@ import joblib, time
 import cv2
 
 EP_MAX = 500000
+
 EP_LEN = 50
 N_WORKER = 7               # parallel workers
 GAMMA = 0.98                # reward discount factor
@@ -23,14 +24,12 @@ A_LR = 0.0001               # learning rate for actor
 C_LR = 0.0001               # learning rate for critic
 LR = 0.0001
 
-EP_BATCH_SIZE = 10
-UPDATE_L_STEP = 30
-BATCH_SIZE = 4000
-MIN_BATCH_SIZE = 64       # minimum batch size for updating PPO
+
+BATCH_SIZE = 256
+MIN_BATCH_SIZE = 32       # minimum batch size for updating PPO
 
 UPDATE_STEP = 10            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
-GAME = 'Pendulum-v0'
 S_DIM, A_DIM = centauro_env.observation_space, centauro_env.action_space 
 Action_Space = centauro_env.action_type
 
@@ -116,7 +115,7 @@ class PPO(object):
         self.saver = tf.train.Saver()
         self.summary_writer = tf.summary.FileWriter('./log', self.sess.graph)   
 
-        self.pi_prob = tf.nn.softmax(pd.logits)
+        # self.pi_prob = tf.nn.softmax(pd.logits)
         self.aloss = pg_loss 
         self.closs = tf.reduce_mean(vf_losses1) 
         self.total_loss = loss
@@ -128,6 +127,7 @@ class PPO(object):
     def load_model(self):
         print ('Loading Model...')
         ckpt = tf.train.get_checkpoint_state('./model/rl/')
+        # ckpt = tf.train.get_checkpoint_state('./all_model/log_gppo/')
         if ckpt and ckpt.model_checkpoint_path:
             self.saver.restore(self.sess, ckpt.model_checkpoint_path)
             print ('loaded')
@@ -187,14 +187,17 @@ class PPO(object):
         # w_init = tf.random_normal_initializer(0., 0.01)
         # w_init_big = tf.random_normal_initializer(0., 0.01)
         with tf.variable_scope(name):
-            feature = self._build_feature_net('feature', input_state, trainable=trainable)
+            # feature = self._build_feature_net('feature', input_state, trainable=trainable)
+            h1 = tf.layers.dense(input_state, 256, tf.nn.relu, kernel_initializer=tf.orthogonal_initializer(2), name = 'fc11', trainable=trainable)
+            feature = tf.layers.dense(h1, 128, tf.nn.relu, kernel_initializer=tf.orthogonal_initializer(2), name = 'fc12', trainable=trainable)
+
             with tf.variable_scope('actor_critic'):
-                h4 = tf.layers.dense(feature, 512, tf.nn.relu, kernel_initializer=tf.orthogonal_initializer(2), name = 'fc1', trainable=trainable)
+                h4 = tf.layers.dense(feature, 128, tf.nn.relu, kernel_initializer=tf.orthogonal_initializer(2), name = 'fc1', trainable=trainable)
 
                 if isinstance(Action_Space, gym.spaces.Box):
                     print('continue action',A_DIM, S_DIM)
                     pi = tf.layers.dense(h4, A_DIM, kernel_initializer=tf.orthogonal_initializer(0.01), name = 'fc_pi', trainable=trainable)
-                    logstd = tf.get_variable(name="logstd", shape=[1, actdim], initializer=tf.zeros_initializer())
+                    logstd = tf.get_variable(name="logstd", shape=[1, A_DIM], initializer=tf.zeros_initializer())
                     pdparam = tf.concat([pi, pi * 0.0 + logstd], axis=1)
                     pdtype = make_pdtype(Action_Space)
                     pd = pdtype.pdfromflat(pdparam)
@@ -218,9 +221,6 @@ class PPO(object):
             a = self.sess.run(self.sample_op_det, {self.tfs: s, self.tf_is_train: False})[0]
         else:
             a = self.sess.run(self.sample_op, {self.tfs: s, self.tf_is_train: False})[0]
-        # prob_weights = self.sess.run(self.pi_prob, feed_dict={self.tfs: s})
-        # a = np.random.choice(range(prob_weights.shape[1]),
-        #                           p=prob_weights.ravel())
 
         if isinstance(Action_Space, gym.spaces.Box):
             a = np.clip(a, -1, 1)
@@ -266,7 +266,7 @@ class PPO(object):
         size = 2560 #int(len(a)/4) #int(BATCH_SIZE*0.3)
         # selected_index = np.random.choice(len(G_lift_a), size, replace=False)
         # selected_index = np.random.randint(len(G_lift_a) - size - 1)
-        simi_threshold = 12
+        simi_threshold = 2
         print(len(a))
         for index_s in range(0, len(s), 3):
             sub_s = s[index_s]
@@ -465,7 +465,8 @@ class PPO(object):
             ratio, vs, vl = self.sess.run([self.ratio, self.vs, self.vl], feed_dict = feed_dict)
             ratio = ratio.flatten()
             for i in range(len(rs)): #range(25):
-                print("%8.4f, %8.4f|, %8.4f, %8.4f|, %8.4f, %8.4f, %8.4f|, %8.4f|"%(rs[i], rl[i], vs[i], vl[i], adv_s[i], adv_l[i], adv[i], ratio[i]), a[i], info[i])
+                print("%8.4f, %8.4f|, %8.4f, %8.4f|, %8.4f, %8.4f, %8.4f|, %8.4f|"%(rs[i], rl[i], vs[i], vl[i], adv_s[i], adv_l[i], adv[i], ratio[i]), info[i])
+                print(a[i])
                 # print("%8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %6.0i, %8.4f"%(reward[i], r[i], vpred[i], vpred_new[i], adv[i], ratio[i], a[i], a_prob[i][act]), a_prob[i])
 
             print(rs.mean(), rl.mean())
@@ -490,13 +491,10 @@ class PPO(object):
             ROLLING_EVENT.set()         # set roll-out available
             
             update_count += 1
-            if update_count % UPDATE_L_STEP == 1:
-                update_count = 1
-                s_all, a_all, rs_all, rl_all, adv_s_all, adv_l_all = [], [], [], [], [], []
-                print('reset')
 
-            if entropy < 1.5:         # stop training
-                COORD.request_stop()
+            # # if entropy < 1:         # stop training
+            # if GLOBAL_STEP > 620000:
+            #     COORD.request_stop()
 
 
 class Worker(object):
@@ -629,7 +627,7 @@ class Worker(object):
         # print('-----------------')
         return buffer_adv, buffer_return
 
-    def process_and_send(self, buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_info, s_, end):
+    def process_and_send(self, buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_info, s_):
         buffer_vpred_s, buffer_vpred_l = self.ppo.sess.run([self.ppo.vs, self.ppo.vl], feed_dict = {self.ppo.tfs: buffer_s, self.ppo.tf_is_train: False})
         buffer_vpred_s = buffer_vpred_s.flatten()
         buffer_vpred_l = buffer_vpred_l.flatten()
@@ -642,22 +640,7 @@ class Worker(object):
         buffer_adv_s, buffer_return_s = self.compute_adv_return(buffer_rs, buffer_vpred_s, buffer_info, 'short')
         buffer_adv_l, buffer_return_l = self.compute_adv_return(buffer_rl, buffer_vpred_l, buffer_info, 'long')
 
-        # for i in range(len(buffer_return_s)):
-        #     buffer_return_l[i] = buffer_return_l[i] + (buffer_return_s[i])
-            # print(before, buffer_rl[i], buffer_return_s[i])
-
         buffer_adv_s = buffer_return_s*1
-
-        # if buffer_adv_l.max() > 0:
-        #     buffer_adv_l = buffer_adv_s * buffer_adv_l.max() + buffer_adv_l
-        # else:
-        #     buffer_adv_l = buffer_adv_s * abs(buffer_adv_l.min()) + buffer_adv_l
-        
-        # for i in range(len(buffer_adv_s)):
-        #     if buffer_adv_s[i] > -0: # and buffer_adv_s[i] < 0.5:
-        #         buffer_adv_s[i] = 0
-
-        # buffer_adv_l = buffer_return_l - buffer_vpred_l[:-1]
 
         if self.wid == 0:
             print('----')
@@ -692,6 +675,9 @@ class Worker(object):
         print('evaluating model', ep_num) 
         for test_num in range(ep_num):
             s = self.env.reset(0, 0, 1)
+            vpred_s, vpred_l = self.ppo.get_v(s)
+            print(vpred_l)
+
             crashed = False
             tra_len = 0
             # if test_num > 0 and test_num % 100 == 0:
@@ -699,7 +685,9 @@ class Worker(object):
             #     print ('success rate', goal_num/ep_num, 'failed rate', failed_num/ep_num, 'average reward', sum_reward/step_count)
             for step in range(max_step):
                 a = self.ppo.choose_action(s, False)
+                # print('action generated:', a)
                 s_, r_short, r_long, done, info = self.env.step(a)
+
                 tra_len += 1
 
                 step_count += 1
@@ -736,6 +724,7 @@ class Worker(object):
         for test_num in range(100):
             count += 1
             s = self.env.reset(0, 0, 1)
+
             for step in range(max_step):
                 a = self.ppo.choose_action(s, False)
                 s_, r_short, r_long, done, info = self.env.step(a)
@@ -810,9 +799,9 @@ class Worker(object):
         # self.env.save_ep()
         # if self.wid != 0:
         #     self.test_model(5)
-        if self.wid == 0:
-            while not COORD.should_stop():
-                self.evaluate_model(50)
+        # if self.wid == 0:
+        #     while not COORD.should_stop():
+        #         self.evaluate_model(50)
         # for _ in range(2):
         #     s = self.env.reset( 0, 0, 1)
         #     self.env.save_ep()
@@ -843,6 +832,7 @@ class Worker(object):
                     update_counter += 1
 
                 a = self.ppo.choose_action(s, False)
+                # print('action generated:', a)
                 # self.ppo.get_action_prob(s)
                 s_, r_short, r_long, done, info = self.env.step(a)
                 vpred_s, vpred_l = self.ppo.get_v(s)
@@ -853,10 +843,6 @@ class Worker(object):
                 # plt.clf()
                 # plt.imshow(img)
                 # plt.pause(0.01)
-
-                # if self.wid == 0:
-                #     prob = self.ppo.get_action_prob(s)
-                #     print("a: %6i | rs: %7.4f| rl: %7.4f| rs: %7.4f| rl: %7.4f| prob: %7.4f" %(a, r_short, r_long, vpred_s, vpred_l, prob[a]), info)
 
                 buffer_s.append(s*1)
                 buffer_a.append(a)
@@ -871,24 +857,8 @@ class Worker(object):
                 s = s_
                 t += 1
 
-                # if info == 'crash' and saved_ep == False:
-                #     # self.env.save_ep()
-                #     # self.env.save_start_end_ep()
-                #     saved_ep = True
-
-                # if self.wid == 0:
-                #     if t == ep_length-1 or done:
-                #         buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
-                #         break
-                #     else:
-                #         continue
-
-                if self.wid == 0 and (done or t == EP_LEN-1):
-                    break
-
-                if (GLOBAL_UPDATE_COUNTER >= BATCH_SIZE or t == ep_length-1 or done) and self.wid != 0 :
-                # if (GLOBAL_EP != 0 and GLOBAL_EP%EP_BATCH_SIZE == 0) or t == ep_length-1 or done:
-                    buffer_return_s, buffer_return_l, buffer_adv_s, buffer_adv_l, info_num = self.process_and_send(buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_info, s_, self.env.return_end)
+                if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE or t == ep_length-1 or done:
+                    buffer_return_s, buffer_return_l, buffer_adv_s, buffer_adv_l, info_num = self.process_and_send(buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_info, s_)
                     bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return_s)[:, np.newaxis], np.array(buffer_return_l)[:, np.newaxis], np.array(buffer_adv_s)[:, np.newaxis], np.array(buffer_adv_l)[:, np.newaxis], np.vstack(info_num)     
                     QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
 
@@ -902,7 +872,6 @@ class Worker(object):
 
                     buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
                     if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE:
-                    # if (GLOBAL_EP != 0 and GLOBAL_EP%EP_BATCH_SIZE == 0):
                         ROLLING_EVENT.clear()       # stop collecting data
                         UPDATE_EVENT.set()          # globalPPO update
 
@@ -923,7 +892,7 @@ if __name__ == '__main__':
     ROLLING_EVENT.set()             # start to roll out
     workers = [Worker(wid=i) for i in range(N_WORKER)]
     
-    GLOBAL_UPDATE_COUNTER, GLOBAL_EP, GLOBAL_STEP = 0, 1, 1
+    GLOBAL_UPDATE_COUNTER, GLOBAL_EP, GLOBAL_STEP = 0, 1, 540700
 
     GLOBAL_RUNNING_R = []
     COORD = tf.train.Coordinator()

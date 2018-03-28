@@ -10,8 +10,8 @@ class VecNormalize(object):
         self.venv = venv
         self._observation_space = self.venv.observation_space
         self._action_space = venv.action_space
-        # self.ob_rms = RunningMeanStd(shape=self._observation_space.shape) if ob else None
-        self.ob_rms = RunningMeanStd(shape=4) if ob else None
+        self.ob_rms = RunningMeanStd(shape=self._observation_space.shape) if ob else None
+        # self.ob_rms = RunningMeanStd(shape=4) if ob else None
         self.ret_s_rms = RunningMeanStd(shape=()) if ret else None
         self.ret_l_rms = RunningMeanStd(shape=()) if ret else None
         self.clipob = clipob
@@ -42,10 +42,10 @@ class VecNormalize(object):
         return obs, rews_s, rews_l, news, infos
     def _obfilt(self, obs):
         if self.ob_rms: 
-            ob_state = obs[-4:]
-            # self.ob_rms.update(ob_state)
+            ob_state = obs
+            self.ob_rms.update(ob_state)
             ob_state = np.clip((ob_state - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + self.epsilon), -self.clipob, self.clipob)
-            obs[-4:] = ob_state
+            obs = ob_state
             return obs
         else:
             return obs
@@ -97,8 +97,8 @@ class RunningMeanStd(object):
         self.var = np.zeros(shape, 'float64')
         self.count = epsilon
 
-        self.mean = np.array([0.05, 0.05, 0.05, 0.05])
-        self.var = np.array([0.1, 0.1, 0.1, 0.1])
+        # self.mean = np.array([0.05, 0.05, 0.05, 0.05])
+        # self.var = np.array([0.1, 0.1, 0.1, 0.1])
 
     def update(self, x):
         batch_mean = np.mean(x, axis=0)

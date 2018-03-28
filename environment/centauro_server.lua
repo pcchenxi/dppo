@@ -12,8 +12,8 @@ require("robot_control")
 -- simExtRemoteApiStart(19999)
 
 _obs_mode = 'random' --'near'
-_bound_x = 1.5
-_bound_y = 1.5
+_bound_x = 1.2
+_bound_y = 1.2
 
 _init_target_dist = 0.2
 _target_dist = _init_target_dist
@@ -24,12 +24,11 @@ _modifly_prob = 0
 function start()
     -- sleep (3)
     -- print('reset')
-    _head_check_hd = simGetObjectHandle('head_check')
     _fake_robot_hd = simGetObjectHandle('fake_robot')
     _robot_hd = simGetObjectHandle('centauro')
-    _robot_body_hd = simGetObjectHandle('body_ref')
     _target_hd = simGetObjectHandle('target')
-    _joint_hds = get_joint_hds(16)
+    _joint_hds = get_joint_hds(24)
+    _mode = simGetModelProperty(_robot_hd)
 
     _start_pos = simGetObjectPosition(_robot_hd, -1)
     _start_ori = simGetObjectOrientation(_robot_hd,-1)
@@ -74,6 +73,9 @@ function start()
     _center_x = 0
     _center_y = 0
 
+    _start_t_pos[1] = (math.random()-0.5)*2
+    _start_t_pos[2] = (math.random()-0.5)*2
+    simSetObjectPosition(_target_hd, -1, _start_t_pos)
     -- print (_start_pos[1], _start_pos[2])
 end
 
@@ -107,55 +109,88 @@ end
 function reset(inInts,inFloats,inStrings,inBuffer)
     global_counter = global_counter + 1
 
-    local radius = inFloats[1]
-    _init_target_dist = radius
-    local env_mode = inFloats[2] --   0: random environment   1: target environment 
-    local reset_mode = inFloats[3] 
-    --   0: pure random ep        1: allow replay buffer    2: continue... only change target position   3: play by user  4: close to goal  5: after collide 
-    _g_save_ep = inFloats[4]
-    -- print ('reset', env_mode, reset_mode)
+    -- print('in reset')
+    -- simSetModelProperty(_robot_hd, 32)
+    -- reset_joint(_joint_hds)
+    -- set_joint_values(_joint_hds, _start_joint_values)    
+    -- simSetObjectPosition(_robot_hd, -1, _start_pos)
+    -- simSetObjectOrientation(_robot_hd, -1, _start_ori)
+    -- local objects=simGetObjectsInTree(_robot_hd,sim_handle_all,0)
+    -- for i=1,#objects,1 do
+    --    simResetDynamicObject(objects[i])
+    -- end
+    -- simSwitchThread()
+    -- sleep(1)
 
-    if reset_mode == 4 then 
-        _target_dist = 0.0
-    else 
-        _target_dist = _init_target_dist
-    end
+    -- simSetModelProperty(_robot_hd, _mode)
 
-    if env_mode == 0 then 
-        sample_ep(radius, reset_mode)  -- small random env
-    elseif env_mode == 1 and reset_mode ~= 3 then
-        sample_ep_fixenv(radius, reset_mode) -- initial scene
-    elseif reset_mode == 3 then
-        sample_ep_userplay(env_mode, reset_mode)
-    end
-    local robot_pos = simGetObjectPosition(_robot_hd, -1)
-    _center_x = robot_pos[1]
-    _center_y = robot_pos[2]   
+    -- local radius = inFloats[1]
+    -- _init_target_dist = radius
+    -- local env_mode = inFloats[2] --   0: random environment   1: target environment 
+    -- local reset_mode = inFloats[3] 
+    -- --   0: pure random ep        1: allow replay buffer    2: continue... only change target position   3: play by user  4: close to goal  5: after collide 
+    -- _g_save_ep = inFloats[4]
+    -- -- print ('reset', env_mode, reset_mode)
 
-    _current_ep = convert_current_ep()
-    _current_tra = {}      
-    _current_tra[1] = _current_ep
+    -- if reset_mode == 4 then 
+    --     _target_dist = 0.0
+    -- else 
+    --     _target_dist = _init_target_dist
+    -- end
+
+    -- if env_mode == 0 then 
+    --     sample_ep(radius, reset_mode)  -- small random env
+    -- elseif env_mode == 1 and reset_mode ~= 3 then
+    --     sample_ep_fixenv(radius, reset_mode) -- initial scene
+    -- elseif reset_mode == 3 then
+    --     sample_ep_userplay(env_mode, reset_mode)
+    -- end
+    -- local robot_pos = simGetObjectPosition(_robot_hd, -1)
+    -- _center_x = robot_pos[1]
+    -- _center_y = robot_pos[2]   
+
+    -- _current_ep = convert_current_ep()
+    -- _current_tra = {}      
+    -- _current_tra[1] = _current_ep
     return {}, {}, {}, ''
 end
 
-function step(inInts,inFloats,inStrings,inBuffer)
+function step(inInts,actions,inStrings,inBuffer)
     -- print('step')
-    _pre_ep = convert_current_ep()
-    res = do_action_rl(_robot_hd, inFloats)
-    _current_ep = convert_current_ep()
-    _current_tra[#_current_tra+1] = _current_ep
-    return {}, {}, {}, res
-end
+    -- _pre_ep = convert_current_ep()
+    -- res = do_action_rl(_robot_hd, inFloats)
+    -- _current_ep = convert_current_ep()
+    -- _current_tra[#_current_tra+1] = _current_ep
+    for i=1, 20, 1 do
+        local hd = _joint_hds[i]
+        simSetJointTargetVelocity(hd, 0.5*actions[i])
+        --simSetJointForce(hd, 100)
+    end 
+    for i=21, #_joint_hds, 1 do
+        local hd = _joint_hds[i]
+        simSetJointTargetVelocity(hd, 30*actions[i])
+        --simSetJointForce(hd, 100)
+    end 
 
-function get_robot_gpose(inInts,inFloats,inStrings,inBuffer)
-    local g_pose = {}
-    local pos = simGetObjectPosition(_robot_hd, -1)
-    local ori = simGetObjectOrientation(_robot_hd, -1)
+    -- check collision
+    local res, data = simCheckDistance(_collection_robot_hd, _collection_hd, 0.05)
+    if data ~= nil then 
+        res = 'c'
+    else
+        res = 't'
+    end
 
-    g_pose[1] = pos[1]
-    g_pose[2] = pos[2]
-    g_pose[3] = ori[3]
-    return {}, g_pose, {}, ''
+    for i=1, #_joint_hds-4, 1 do
+        local joint_position = simGetObjectPosition(_joint_hds[i], -1)
+        if joint_position[3] < 0.10 then
+            res = 'c'
+            break
+        end
+    end
+
+
+    joint_pose = get_joint_pos_vel(_joint_hds)
+    return {}, joint_pose, {}, res
 end
 
 function clear_history(inInts,inFloats,inStrings,inBuffer)
@@ -250,60 +285,19 @@ function get_obstacle_info(inInts,inFloats,inStrings,inBuffer)
     return {}, obs_info, {}, ''
 end
 
-function get_robot_state(inInts,inFloats,inStrings,inBuffer)
+function get_target_state(inInts,inFloats,inStrings,inBuffer)
     local target_pos =simGetObjectPosition(_target_hd, _robot_hd)
-    local target_ori =simGetObjectPosition(_target_hd, _robot_hd)
+    return {}, {target_pos[1], target_pos[2]}, {}, ''
+end
 
-    local pos =simGetObjectPosition(_robot_hd,-1)
-    local ori =simGetObjectOrientation(_robot_hd,-1)
-    -- local joint_pose = get_joint_values(_joint_hds)
-    local leg_l = get_current_l(_robot_hd)
-    local diff_x = math.abs(_center_x - pos[1])
-    local diff_y = math.abs(_center_y - pos[2])
-    local dist_to_center = math.sqrt(pos[1]*pos[1] + pos[2]*pos[2])
-    -- local dist_to_center = math.sqrt(diff_x*diff_x + diff_y*diff_y)
+function get_robot_position(inInts,inFloats,inStrings,inBuffer)
+    local pos =simGetObjectPosition(_robot_hd,-1)    
+    return {}, {pos[1], pos[2]}, {}, ''
+end
 
-    local state = {}
-    local target_angle = math.atan2(target_pos[1], target_pos[2])
-    local target_dist = math.sqrt(target_pos[1]*target_pos[1] + target_pos[2]*target_pos[2])
-
-    state[1] = target_dist
-    -- state[2] = dist_to_center
-    state[2] = pos[1]
-    state[3] = pos[2]
-    state[4] = target_pos[1]
-    state[5] = target_pos[2]  --(target_dist/(_target_dist*2)-0.5) * 2
-    -- state[3] = target_ori[3]
-    -- state[4] = target_pos[3] - 0.4
-    -- state[5] = _pre_target_l
-
-    local target_pos_head =simGetObjectPosition(_target_hd, _head_check_hd)
-    state[#state+1] = target_pos_head[1]
-    state[#state+1] = target_pos_head[2]
-    state[#state+1] = target_pos_head[3]
-
-    local min_dist = 999
-    for i=1, #_obs_hds, 1 do 
-        local obs_pos = simGetObjectPosition(_obs_hds[i], _head_check_hd)
-        local obs_pos_g = simGetObjectPosition(_obs_hds[i], -1)
-                        
-        state[#state+1] = obs_pos[1]
-        state[#state+1] = obs_pos[2]
-        state[#state+1] = obs_pos[3]
-        state[#state+1] = obs_pos_g[3]
-    end
-    -- state[#state+1] = ori[3]
-    state[#state+1] = pos[3]
-    state[#state+1] = leg_l
-
-    local threshold = 0.3
-    local res, data = simCheckDistance(_collection_robot_hd, _collection_hd, threshold)
-    local dist = threshold
-    if data ~= nil then 
-        dist = data[7]
-    end
-    state[#state+1] = dist
-    return {}, state, {}, ''
+function get_robot_state(inInts,inFloats,inStrings,inBuffer)  
+    local joint_pose = get_joint_pos_vel(_joint_hds)
+    return {}, joint_pose, {}, ''
 end
 
 function generate_path()
@@ -313,8 +307,8 @@ function generate_path()
     print ('path found ', #path)
     -- displayInfo('finish 1 '..#path)
 
-    for i=1, 30, 1 do 
-        applyPath(task_hd, path, 0.1)
+    for i=1, 1, 1 do 
+        applyPath(task_hd, path, 0)
     end
     simExtOMPL_destroyTask(task_hd)
 
@@ -347,7 +341,7 @@ end
 
 function sample_obstacle_position()
     local visable_count = 0
-    local max_count = 0 --math.random(8)
+    local max_count = math.random(12)
     local start = math.random(#_obs_hds)
     for i=start, start + #_obs_hds, 1 do
         local visable = math.random()
@@ -358,8 +352,8 @@ function sample_obstacle_position()
             if _obs_mode == 'random' then      
                 -- obs_pos[1] = (math.random()-0.5)*2 * 0.5
                 local side = math.random()
-                obs_pos[1] = math.random(4) * 0.5 - 1  --(math.random()-0.5)*2 * 0.8
-                obs_pos[2] = math.random(4) * 0.5 - 1 --(math.random()-0.5)*2 * 1       
+                obs_pos[1] = math.random(8) * 0.25 - 1  --(math.random()-0.5)*2 * 0.8
+                obs_pos[2] = math.random(4) * 0.25 - 1 --(math.random()-0.5)*2 * 1       
                 -- if side < 0.5 then 
                 --     obs_pos[1] = obs_pos[1] - 0.6
                 -- else
@@ -416,10 +410,11 @@ function sample_new_ep()
 
     local target_pos = {}
     target_pos[1] = (math.random() - 0.5) *2 * 0.1
-    target_pos[2] = (math.random()-0.5) + 0.3 --math.random() * _target_dist --* global_counter/20000
-    if target_pos[2] > 0.4 then 
-        target_pos[2] = 0.4
-    end
+
+    target_pos[2] = 1.2 -- math.random()/2 + 0.2 --math.random() * _target_dist --* global_counter/20000
+    -- if target_pos[2] > 0.5 then 
+    --     target_pos[2] = 0.5
+    -- end
     target_pos[3] = _start_t_pos[3] --(math.random() - 0.5) * 2 * 0.1 + 0.4
 
     -- if special > 0.2 then 
@@ -449,14 +444,15 @@ function sample_new_ep()
     if special > -1 then 
         local skip = 0
         local obs_pos = {}
-        global_counter = 2
+
+        -- global_counter = 2
         if global_counter == 1 then 
             obs_index = 2
         elseif global_counter == 2 then  
             obs_index = 4
         elseif global_counter == 3 then  
             obs_index = 6
-            -- global_counter = 0
+            global_counter = 0
         else 
             global_counter = 0
             skip = 1
@@ -837,9 +833,7 @@ initialized = false
 global_counter = 0
 
 start()
-_current_ep = convert_current_ep() 
--- generate_path()
--- sample_ep(1.5)
+-- _current_ep = convert_current_ep() 
 
 -- for i=1, #_joint_hds, 1 do
 -- local hd = _joint_hds[5]
@@ -849,12 +843,15 @@ _current_ep = convert_current_ep()
 -- simSwitchThread()
 -- end 
 
+-- geting camera data
+-- if (sim_call_type==sim_childscriptcall_sensing) then 
+--     r=simGetVisionSensorImage(depthCam)
+--     resolution = simGetVisionSensorResolution(depthCam)
+--     print(#r)
+--     print(r[100000], r[100001], r[100002], r[600000], r[600001], r[600002])
+-- end
 
 while simGetSimulationState()~=sim_simulation_advancing_abouttostop do
     -- do something in here
     -- simSwitchThread()
 end
-
-
-
-
