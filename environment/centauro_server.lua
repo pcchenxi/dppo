@@ -161,11 +161,17 @@ function step(inInts,actions,inStrings,inBuffer)
     -- res = do_action_rl(_robot_hd, inFloats)
     -- _current_ep = convert_current_ep()
     -- _current_tra[#_current_tra+1] = _current_ep
-    for i=1, #_joint_hds, 1 do
+    for i=1, 20, 1 do
         local hd = _joint_hds[i]
-        simSetJointTargetVelocity(hd, 5*actions[i])
+        simSetJointTargetVelocity(hd, 0.5*actions[i])
         --simSetJointForce(hd, 100)
     end 
+    for i=21, #_joint_hds, 1 do
+        local hd = _joint_hds[i]
+        simSetJointTargetVelocity(hd, 30*actions[i])
+        --simSetJointForce(hd, 100)
+    end 
+
     -- check collision
     local res, data = simCheckDistance(_collection_robot_hd, _collection_hd, 0.05)
     if data ~= nil then 
@@ -176,7 +182,7 @@ function step(inInts,actions,inStrings,inBuffer)
 
     for i=1, #_joint_hds-4, 1 do
         local joint_position = simGetObjectPosition(_joint_hds[i], -1)
-        if joint_position[3] < 0.20 then
+        if joint_position[3] < 0.10 then
             res = 'c'
             break
         end
