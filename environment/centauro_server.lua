@@ -73,6 +73,9 @@ function start()
     _center_x = 0
     _center_y = 0
 
+    _start_t_pos[1] = (math.random()-0.5)*2
+    _start_t_pos[2] = (math.random()-0.5)*2
+    simSetObjectPosition(_target_hd, -1, _start_t_pos)
     -- print (_start_pos[1], _start_pos[2])
 end
 
@@ -106,13 +109,20 @@ end
 function reset(inInts,inFloats,inStrings,inBuffer)
     global_counter = global_counter + 1
 
-    simSetModelProperty(robot_hd, 32)
-    reset_joint(_joint_hds)
-    set_joint_values(_joint_hds, _start_joint_values)
-    simSetObjectPosition(robot_hd, -1, _start_pos)
-    simSetObjectOrientation(robot_hd, -1, _start_ori)
-    sleep(1)
-    simSetModelProperty(robot_hd, _mode)
+    -- print('in reset')
+    -- simSetModelProperty(_robot_hd, 32)
+    -- reset_joint(_joint_hds)
+    -- set_joint_values(_joint_hds, _start_joint_values)    
+    -- simSetObjectPosition(_robot_hd, -1, _start_pos)
+    -- simSetObjectOrientation(_robot_hd, -1, _start_ori)
+    -- local objects=simGetObjectsInTree(_robot_hd,sim_handle_all,0)
+    -- for i=1,#objects,1 do
+    --    simResetDynamicObject(objects[i])
+    -- end
+    -- simSwitchThread()
+    -- sleep(1)
+
+    -- simSetModelProperty(_robot_hd, _mode)
 
     -- local radius = inFloats[1]
     -- _init_target_dist = radius
@@ -164,19 +174,17 @@ function step(inInts,actions,inStrings,inBuffer)
         res = 't'
     end
 
+    for i=1, #_joint_hds-4, 1 do
+        local joint_position = simGetObjectPosition(_joint_hds[i], -1)
+        if joint_position[3] < 0.20 then
+            res = 'c'
+            break
+        end
+    end
+
+
     joint_pose = get_joint_pos_vel(_joint_hds)
     return {}, joint_pose, {}, res
-end
-
-function get_robot_gpose(inInts,inFloats,inStrings,inBuffer)
-    local g_pose = {}
-    local pos = simGetObjectPosition(_robot_hd, -1)
-    local ori = simGetObjectOrientation(_robot_hd, -1)
-
-    g_pose[1] = pos[1]
-    g_pose[2] = pos[2]
-    g_pose[3] = ori[3]
-    return {}, g_pose, {}, ''
 end
 
 function clear_history(inInts,inFloats,inStrings,inBuffer)
@@ -817,7 +825,7 @@ initialized = false
 global_counter = 0
 
 start()
-_current_ep = convert_current_ep() 
+-- _current_ep = convert_current_ep() 
 
 -- for i=1, #_joint_hds, 1 do
 -- local hd = _joint_hds[5]
