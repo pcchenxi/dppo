@@ -15,7 +15,7 @@ dh = 0.02 * scale
 dl = 0.02 * scale
 dw = math.pi/180 * 5 * scale
 
-collision_hd_1 = simGetCollectionHandle('centauro')
+collision_hd_1 = simGetCollectionHandle('centauro_mesh')
 collision_hd_2 = simGetCollectionHandle('obstacle_all')
 
 control_joint_hds = get_joint_hds(8)
@@ -259,10 +259,11 @@ get_intersection_point=function(x0, y0, x1, y1, r0, r1)
 end
 
 function get_current_l(robot_hd)
-    local ankle_hd = simGetObjectHandle('ankle_pitch_1')
-    local hip_hd = simGetObjectHandle('hip_ori_ref')
+    -- local ankle_hd = simGetObjectHandle('ankle_pitch_1')
+    -- local hip_hd = simGetObjectHandle('hip_ori_ref')
 
-    local foot_pos = simGetObjectPosition(ankle_hd, hip_hd)
+    -- local foot_pos = simGetObjectPosition(ankle_hd, hip_hd)
 
-    return math.abs(foot_pos[2])
+    -- return math.abs(foot_pos[2])
+    return 0.1
 end

@@ -83,7 +83,7 @@ function get_joint_pos_vel(joint_hds)
     end     
 
     for i=1, #joint_hds, 1 do
-        _, joint_pos_vels[#joint_hds + i] = simGetObjectFloatParameter(hd, 2012)
+        _, joint_pos_vels[#joint_hds + i] = simGetObjectFloatParameter(joint_hds[i], 2012)
     end 
     return joint_pos_vels
 end 
