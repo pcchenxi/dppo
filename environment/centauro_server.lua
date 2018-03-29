@@ -6,7 +6,7 @@ package.path=package.path .. path
 
 require("common_functions")
 require("ompl_functions")
-require("robot_control")
+-- require("robot_control")
 
 -- simSetThreadSwitchTiming(2) 
 -- simExtRemoteApiStart(19999)
@@ -161,11 +161,16 @@ function step(inInts,actions,inStrings,inBuffer)
     -- res = do_action_rl(_robot_hd, inFloats)
     -- _current_ep = convert_current_ep()
     -- _current_tra[#_current_tra+1] = _current_ep
-    for i=1, 20, 1 do
+    for i=1, 16, 1 do
         local hd = _joint_hds[i]
         simSetJointTargetVelocity(hd, 0.5*actions[i])
         --simSetJointForce(hd, 100)
     end 
+    for i=17, 20, 1 do
+        local hd = _joint_hds[i]
+        simSetJointTargetVelocity(hd, 5*actions[i])
+        --simSetJointForce(hd, 100)
+    end     
     for i=21, #_joint_hds, 1 do
         local hd = _joint_hds[i]
         simSetJointTargetVelocity(hd, 30*actions[i])
@@ -182,7 +187,7 @@ function step(inInts,actions,inStrings,inBuffer)
 
     for i=1, #_joint_hds-4, 1 do
         local joint_position = simGetObjectPosition(_joint_hds[i], -1)
-        if joint_position[3] < 0.10 then
+        if joint_position[3] < 0.20 then
             res = 'c'
             break
         end

@@ -20,6 +20,13 @@ class VecNormalize(object):
         self.ret_l = np.zeros(self.num_envs)
         self.gamma = gamma
         self.epsilon = epsilon
+
+        self.ret_l_rms.var = np.load('./ret_var.npy')
+        self.ob_rms.mean = np.load('./ob_mean.npy')
+        self.ob_rms.var = np.load('./ob_var.npy')
+
+        self.count = 0
+
     def step(self, vac):
         """
         Apply sequence of actions to sequence of environments
@@ -35,15 +42,23 @@ class VecNormalize(object):
         #     self.ret_s_rms.update((self.ret_s + self.ret_l)/2)
         #     rews_s = np.clip(rews_s / np.sqrt(self.ret_s_rms.var + self.epsilon), -self.cliprew, self.cliprew)
         #     rews_l = np.clip(rews_l / np.sqrt(self.ret_s_rms.var + self.epsilon), -self.cliprew, self.cliprew)
-        # if self.ret_l_rms: 
-        #     self.ret_l_rms.update(self.ret_l)
-        #     rews_l = np.clip(rews_l / np.sqrt(self.ret_l_rms.var + self.epsilon), -self.cliprew, self.cliprew)
+        if self.ret_l_rms: 
+            # self.ret_l_rms.update(self.ret_l)
+            rews_l = np.clip(rews_l / np.sqrt(self.ret_l_rms.var + self.epsilon), -self.cliprew, self.cliprew)
+
+        if self.count > 1000:
+            np.save('./ret_var', self.ret_l_rms.var)
+            self.count = 0
 
         return obs, rews_s, rews_l, news, infos
     def _obfilt(self, obs):
         if self.ob_rms: 
             ob_state = obs
-            self.ob_rms.update(ob_state)
+            # self.ob_rms.update(ob_state)
+            if self.count > 1000:
+                np.save('./ob_mean', self.ob_rms.mean)
+                np.save('./ob_var', self.ob_rms.var)
+
             ob_state = np.clip((ob_state - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + self.epsilon), -self.clipob, self.clipob)
             obs = ob_state
             return obs

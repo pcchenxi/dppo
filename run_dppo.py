@@ -15,16 +15,14 @@ import joblib, time
 import cv2
 
 EP_MAX = 500000
-EP_LEN = 20
-N_WORKER = 4               # parallel workers
+EP_LEN = 50
+N_WORKER = 7               # parallel workers
 GAMMA = 0.98                # reward discount factor
 LAM = 1
-A_LR = 0.0001               # learning rate for actor
-C_LR = 0.0001               # learning rate for critic
 LR = 0.0001
 
-BATCH_SIZE = 256
-MIN_BATCH_SIZE = 32       # minimum batch size for updating PPO
+BATCH_SIZE = 10240
+MIN_BATCH_SIZE = 256       # minimum batch size for updating PPO
 
 UPDATE_STEP = 10            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
@@ -120,7 +118,7 @@ class PPO(object):
         self.ratio = ratio
         self.grad_norm = _grad_norm
 
-        # self.load_model()   
+        self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')
@@ -464,7 +462,7 @@ class PPO(object):
             ratio = ratio.flatten()
             for i in range(len(rs)): #range(25):
                 print("%8.4f, %8.4f|, %8.4f, %8.4f|, %8.4f, %8.4f, %8.4f|, %8.4f|"%(rs[i], rl[i], vs[i], vl[i], adv_s[i], adv_l[i], adv[i], ratio[i]), info[i])
-                print(a[i])
+                # print(a[i])
                 # print("%8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %6.0i, %8.4f"%(reward[i], r[i], vpred[i], vpred_new[i], adv[i], ratio[i], a[i], a_prob[i][act]), a_prob[i])
 
             print(rs.mean(), rl.mean())
@@ -821,7 +819,7 @@ class Worker(object):
             s = self.env.reset( 0, 1, 1)
 
             while(1):
-                if not ROLLING_EVENT.is_set() and self.wid != 0:                  # while global PPO is updating
+                if not ROLLING_EVENT.is_set():                  # while global PPO is updating
                     ROLLING_EVENT.wait()                        # wait until PPO is updated
                     buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
                     # if update_counter%1 == 0:
