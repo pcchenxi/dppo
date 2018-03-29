@@ -24,7 +24,7 @@ map_pixel = int(map_size/grid_size)
 observation_pixel = int(observation_range/grid_size)
 
 obstacle_num = 5
-observation_space = 48 + 2 #map_pixel*map_pixel + 25  # 60 x 60 + 8  2*3 + 2 + 2
+observation_space = 48 + 3 #map_pixel*map_pixel + 25  # 60 x 60 + 8  2*3 + 2 + 2
 # observation_space = obstacle_num*3 + 2 + 2
 
 action_space = 24 #len(action_list)
@@ -73,7 +73,8 @@ class Simu_env():
         # print(target_info, robot_info)
 
         # state = np.append(observation, target_info)
-        state = np.append(state, target_state)
+        state = np.append(state, target_state[:3])
+        print(len(state))
         return state
 
     def reset(self, env_mode, reset_mode, save_ep):
@@ -138,7 +139,11 @@ class Simu_env():
 
         _, _, g_pose, _, _ = self.call_sim_function(lua_script_name, 'get_robot_position')
 
-        
+        diff_x = abs(g_pose[0]-target_state[3])
+        diff_y = abs(g_pose[1]-target_state[4])
+        dist = math.sqrt(diff_x*diff_x + diff_y*diff_y)
+        target_reward = -(dist - self.dist_pre)
+
         info = 'unfinish'
         is_finish = False
 
@@ -149,8 +154,6 @@ class Simu_env():
         # save robot global pose
         self.robot_pose_list.append(g_pose)
 
-        dist = math.sqrt(target_state[0]*target_state[0] + target_state[1]* target_state[1])
-        target_reward = -(dist - self.dist_pre)
         # if target_reward <= 0:
         #     target_reward = penerty
         # else:
@@ -170,6 +173,7 @@ class Simu_env():
             reward_long = REWARD_CRASH
             info = 'crash'
 
+        print('dist', dist, target_state)
         if dist < 0.2 and info != 'crash': # and diff_l < 0.02:
         # if robot_state[2] > 0.2 and info != 'crash':
             # is_finish = True

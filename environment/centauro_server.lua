@@ -312,7 +312,8 @@ end
 
 function get_target_state(inInts,inFloats,inStrings,inBuffer)
     local target_pos =simGetObjectPosition(_target_hd, _robot_hd)
-    return {}, {target_pos[1], target_pos[2]}, {}, ''
+    local target_g_pos =simGetObjectPosition(_target_hd, -1)
+    return {}, {target_pos[1], target_pos[2], target_pos[3], target_g_pos[1], target_g_pos[2]}, {}, ''
 end
 
 function get_robot_position(inInts,inFloats,inStrings,inBuffer)
