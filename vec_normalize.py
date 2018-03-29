@@ -54,7 +54,7 @@ class VecNormalize(object):
     def _obfilt(self, obs):
         if self.ob_rms: 
             ob_state = obs
-            # self.ob_rms.update(ob_state)
+            self.ob_rms.update(ob_state)
             if self.count > 1000:
                 np.save('./ob_mean', self.ob_rms.mean)
                 np.save('./ob_var', self.ob_rms.var)

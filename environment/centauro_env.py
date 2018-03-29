@@ -74,7 +74,6 @@ class Simu_env():
 
         # state = np.append(observation, target_info)
         state = np.append(state, target_state[:3])
-        print(len(state))
         return state
 
     def reset(self, env_mode, reset_mode, save_ep):
@@ -173,7 +172,7 @@ class Simu_env():
             reward_long = REWARD_CRASH
             info = 'crash'
 
-        print('dist', dist, target_state)
+        # print('dist', dist, target_state)
         if dist < 0.2 and info != 'crash': # and diff_l < 0.02:
         # if robot_state[2] > 0.2 and info != 'crash':
             # is_finish = True
