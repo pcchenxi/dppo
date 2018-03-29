@@ -16,7 +16,7 @@ import cv2
 
 EP_MAX = 500000
 EP_LEN = 50
-N_WORKER = 1               # parallel workers
+N_WORKER = 8               # parallel workers
 GAMMA = 0.98                # reward discount factor
 LAM = 1
 LR = 0.0001
@@ -118,7 +118,7 @@ class PPO(object):
         self.ratio = ratio
         self.grad_norm = _grad_norm
 
-        # self.load_model()   
+        self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')
@@ -854,6 +854,11 @@ class Worker(object):
                 t += 1
 
                 if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE or t == ep_length-1 or done:
+                    if self.wid == 0 and done and (info == 'fall' or info == 'out'):
+                        # print(info)
+                        step_left = ep_length - t
+                        buffer_rl[-1] += self.env.reward_crash * step_left
+
                     buffer_return_s, buffer_return_l, buffer_adv_s, buffer_adv_l, info_num = self.process_and_send(buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_info, s_)
                     bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return_s)[:, np.newaxis], np.array(buffer_return_l)[:, np.newaxis], np.array(buffer_adv_s)[:, np.newaxis], np.array(buffer_adv_l)[:, np.newaxis], np.vstack(info_num)     
                     QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
@@ -877,7 +882,7 @@ class Worker(object):
 
                     if done or t == ep_length-1:
                         # if done != 'goal':
-                        #     self.env.save_start_end_ep()
+                        #     self.env.save_start_end_ep()                            
                         break 
 
 

@@ -42,9 +42,9 @@ class VecNormalize(object):
         #     self.ret_s_rms.update((self.ret_s + self.ret_l)/2)
         #     rews_s = np.clip(rews_s / np.sqrt(self.ret_s_rms.var + self.epsilon), -self.cliprew, self.cliprew)
         #     rews_l = np.clip(rews_l / np.sqrt(self.ret_s_rms.var + self.epsilon), -self.cliprew, self.cliprew)
-        if self.ret_l_rms: 
+        # if self.ret_l_rms: 
             # self.ret_l_rms.update(self.ret_l)
-            rews_l = np.clip(rews_l / np.sqrt(self.ret_l_rms.var + self.epsilon), -self.cliprew, self.cliprew)
+            # rews_l = np.clip(rews_l / np.sqrt(self.ret_l_rms.var + self.epsilon), -self.cliprew, self.cliprew)
 
         if self.count > 1000:
             np.save('./ret_var', self.ret_l_rms.var)
@@ -103,7 +103,9 @@ class VecNormalize(object):
         # return self.venv.num_envs
         return 1
 
-
+    @property
+    def reward_crash(self):
+        return self.venv.reward_crash
 
 class RunningMeanStd(object):
     # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm

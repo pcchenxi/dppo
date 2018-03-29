@@ -83,10 +83,6 @@ function start()
     _center_x = 0
     _center_y = 0
 
-    _start_t_pos[1] = (math.random()-0.5)*2
-    _start_t_pos[2] = (math.random()-0.5)*2
-    simSetObjectPosition(_target_hd, -1, _start_t_pos)
-    -- print (_start_pos[1], _start_pos[2])
 end
 
 function check_avaiable_obstacle_hds()
@@ -130,7 +126,7 @@ function reset(inInts,inFloats,inStrings,inBuffer)
     target_pos[2] = math.random() + 0.2
     target_pos[3] = _start_t_pos[3]
     simSetObjectPosition(_target_hd, -1, target_pos)
-    
+    reset_joint(_joint_hds)
     local objects=simGetObjectsInTree(_base_hd,sim_handle_all,0)
     for i=1,#objects,1 do
         simSetObjectPosition(objects[i], -1, _start_xyz[i])
@@ -184,20 +180,20 @@ function step(inInts,actions,inStrings,inBuffer)
     -- res = do_action_rl(_robot_hd, inFloats)
     -- _current_ep = convert_current_ep()
     -- _current_tra[#_current_tra+1] = _current_ep
-    -- for i=1, 20, 1 do
-    --     local hd = _joint_hds[i]
-    --     -- simSetJointTargetVelocity(hd, 0.5*actions[i])
-    --     simSetJointTargetPosition(hd, math.pi*actions[1])
-    --     --simSetJointForce(hd, 100)
-    -- end 
-    -- for i=17, 20, 1 do
-    --     local hd = _joint_hds[i]
-    --     simSetJointTargetVelocity(hd, 5*actions[i])
-    --     --simSetJointForce(hd, 100)
-    -- end     
+    for i=1, 20, 1 do
+        local hd = _joint_hds[i]
+        simSetJointTargetVelocity(hd, 0.5*actions[i])
+        -- simSetJointTargetPosition(hd, math.pi*actions[1])
+        --simSetJointForce(hd, 100)
+    end 
+    for i=17, 20, 1 do
+        local hd = _joint_hds[i]
+        simSetJointTargetVelocity(hd, 5*actions[i])
+        --simSetJointForce(hd, 100)
+    end     
     for i=21, #_joint_hds, 1 do
         local hd = _joint_hds[i]
-        simSetJointTargetVelocity(hd, 3*actions[i])
+        simSetJointTargetVelocity(hd, 20*actions[i])
         --simSetJointForce(hd, 100)
     end 
 
@@ -212,7 +208,7 @@ function step(inInts,actions,inStrings,inBuffer)
     for i=1, #_joint_hds-4, 1 do
         local joint_position = simGetObjectPosition(_joint_hds[i], -1)
         if joint_position[3] < 0.20 then
-            res = 'c'
+            res = 'a'
             break
         end
     end

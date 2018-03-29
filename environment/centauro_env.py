@@ -33,9 +33,9 @@ action_type = spaces.Box(-1, 1, shape = (action_space,))
 
 lua_script_name = 'world_visual'
 
-REWARD_GOAL = 100
-REWARD_STEP =  -1
-REWARD_CRASH = -20
+REWARD_GOAL = 10
+REWARD_STEP =  -0.05
+REWARD_CRASH = -0.2
 
 class Simu_env():
     def __init__(self, port_num):
@@ -150,7 +150,7 @@ class Simu_env():
         self.robot_pose_list.append(g_pose)
 
         dist = math.sqrt(target_state[0]*target_state[0] + target_state[1]* target_state[1])
-        target_reward = -(dist - self.dist_pre)*10
+        target_reward = -(dist - self.dist_pre)
         # if target_reward <= 0:
         #     target_reward = penerty
         # else:
@@ -159,10 +159,10 @@ class Simu_env():
         self.dist_pre = dist
 
         if found_pose == bytearray(b"a"):       # when collision or no pose can be found
-            # is_finish = True
+            is_finish = True
             # reward_short = -1
             reward_long = REWARD_CRASH    
-            info = 'crash_a'
+            info = 'fall'
 
         if found_pose == bytearray(b"c"):       # when collision or no pose can be found
             is_finish = True
@@ -182,17 +182,14 @@ class Simu_env():
             self.goal_cound = 0
 
 
-        if abs(g_pose[0]) > 2 or abs(g_pose[1]) > 2: # or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
+        if abs(g_pose[0]) > 0.5 or abs(g_pose[1]) < -0.5: # or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
         # if abs(robot_state[1]) > 0.15 or robot_state[2] < -0.6:
-        # if dist > 2:
             is_finish = True
             reward_short = -1
-            reward_long = REWARD_CRASH*20
+            reward_long = REWARD_CRASH
             info = 'out'
-            # print('outof bound', robot_state[1])
 
         reward_long += target_reward + REWARD_STEP
-        # reward_short += off_pose
         return reward_short, reward_long, is_finish, info
 
     ####################################  interface funcytion  ###################################
