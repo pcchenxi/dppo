@@ -181,6 +181,7 @@ class Simu_env():
             if self.goal_cound > 3:
                 info = 'goal'
                 reward_long = REWARD_GOAL
+                is_finish = True
         else:
             self.goal_cound = 0
 
