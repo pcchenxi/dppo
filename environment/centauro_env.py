@@ -91,7 +91,7 @@ class Simu_env():
         # vrep.simxStartSimulation(self.clientID, vrep.simx_opmode_oneshot)
         # time.sleep(1)
         
-        self.restart_simulator()
+        # self.restart_simulator()
 
         res, retInts, retFloats, retStrings, retBuffer = self.call_sim_function(lua_script_name, 'reset', [target_dist, env_mode, reset_mode, save_ep])        
         # state, reward, min_dist, obs_count, is_finish, info = self.step([0, 0, 0, 0, 0])
@@ -263,7 +263,7 @@ class Simu_env():
         # vrep.simxStartSimulation(self.clientID, vrep.simx_opmode_oneshot)
         # time.sleep(1)
 
-        # self.restart_simulator()
+        self.restart_simulator()
 
     def disconnect_vrep(self):
         vrep.simxStopSimulation(self.clientID, vrep.simx_opmode_oneshot)

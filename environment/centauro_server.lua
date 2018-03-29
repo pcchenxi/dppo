@@ -24,6 +24,7 @@ _modifly_prob = 0
 function start()
     -- sleep (3)
     -- print('reset')
+    _base_hd = simGetObjectHandle('world_visual')
     _fake_robot_hd = simGetObjectHandle('fake_robot')
     _robot_hd = simGetObjectHandle('centauro')
     _target_hd = simGetObjectHandle('target')
@@ -48,6 +49,15 @@ function start()
     _obstacle_dynamic_hds = simGetCollectionObjects(_obstacle_dynamic_collection)
 
     _obs_hds = check_avaiable_obstacle_hds()
+
+    _start_xyz = {}
+    _start_ori = {}
+    local objects=simGetObjectsInTree(_base_hd,sim_handle_all,0)
+    for i=1,#objects,1 do
+        _start_xyz[i] = simGetObjectPosition(objects[i], -1)
+        _start_ori[i] = simGetObjectOrientation(objects[i], -1)    
+    end
+
 
     _current_tra = {}
     _current_ep = {}
@@ -113,12 +123,25 @@ function reset(inInts,inFloats,inStrings,inBuffer)
     -- simSetModelProperty(_robot_hd, 32)
     -- reset_joint(_joint_hds)
     -- set_joint_values(_joint_hds, _start_joint_values)    
-    -- simSetObjectPosition(_robot_hd, -1, _start_pos)
-    -- simSetObjectOrientation(_robot_hd, -1, _start_ori)
-    -- local objects=simGetObjectsInTree(_robot_hd,sim_handle_all,0)
-    -- for i=1,#objects,1 do
-    --    simResetDynamicObject(objects[i])
-    -- end
+    -- ori[3] = math.random() * math.pi*2
+
+    target_pos = {}
+    target_pos[1] = 0
+    target_pos[2] = math.random() + 0.2
+    target_pos[3] = _start_t_pos[3]
+    simSetObjectPosition(_target_hd, -1, target_pos)
+    
+    local objects=simGetObjectsInTree(_base_hd,sim_handle_all,0)
+    for i=1,#objects,1 do
+        simSetObjectPosition(objects[i], -1, _start_xyz[i])
+        simSetObjectOrientation(objects[i], -1, _start_ori[i])        
+        simResetDynamicObject(objects[i])
+    end
+
+    pos = simGetObjectPosition(_base_hd, -1)
+    ori = simGetObjectOrientation(_base_hd, -1)
+    ori[3] = math.random() * math.pi*2
+    simSetObjectOrientation(_base_hd, -1, ori)
     -- simSwitchThread()
     -- sleep(1)
 
@@ -161,19 +184,20 @@ function step(inInts,actions,inStrings,inBuffer)
     -- res = do_action_rl(_robot_hd, inFloats)
     -- _current_ep = convert_current_ep()
     -- _current_tra[#_current_tra+1] = _current_ep
-    for i=1, 16, 1 do
-        local hd = _joint_hds[i]
-        simSetJointTargetVelocity(hd, 0.5*actions[i])
-        --simSetJointForce(hd, 100)
-    end 
-    for i=17, 20, 1 do
-        local hd = _joint_hds[i]
-        simSetJointTargetVelocity(hd, 5*actions[i])
-        --simSetJointForce(hd, 100)
-    end     
+    -- for i=1, 20, 1 do
+    --     local hd = _joint_hds[i]
+    --     -- simSetJointTargetVelocity(hd, 0.5*actions[i])
+    --     simSetJointTargetPosition(hd, math.pi*actions[1])
+    --     --simSetJointForce(hd, 100)
+    -- end 
+    -- for i=17, 20, 1 do
+    --     local hd = _joint_hds[i]
+    --     simSetJointTargetVelocity(hd, 5*actions[i])
+    --     --simSetJointForce(hd, 100)
+    -- end     
     for i=21, #_joint_hds, 1 do
         local hd = _joint_hds[i]
-        simSetJointTargetVelocity(hd, 30*actions[i])
+        simSetJointTargetVelocity(hd, 3*actions[i])
         --simSetJointForce(hd, 100)
     end 
 
@@ -858,3 +882,4 @@ while simGetSimulationState()~=sim_simulation_advancing_abouttostop do
     -- do something in here
     -- simSwitchThread()
 end
+

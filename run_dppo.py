@@ -16,7 +16,7 @@ import cv2
 
 EP_MAX = 500000
 EP_LEN = 50
-N_WORKER = 7               # parallel workers
+N_WORKER = 1               # parallel workers
 GAMMA = 0.98                # reward discount factor
 LAM = 1
 LR = 0.0001
@@ -118,7 +118,7 @@ class PPO(object):
         self.ratio = ratio
         self.grad_norm = _grad_norm
 
-        self.load_model()   
+        # self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')
