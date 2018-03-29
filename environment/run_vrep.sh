@@ -1,3 +1,3 @@
-~/workspace/vrep/vrep.sh -gREMOTEAPISERVERSERVICE_20000_FALSE_TRUE  ~/workspace/dppo/environment/sim_centauro.ttt
+~/workspace/vrep/vrep.sh -gREMOTEAPISERVERSERVICE_20000_FALSE_TRUE  ~/workspace/dppo/environment/centauro_motor.ttt
 
 
