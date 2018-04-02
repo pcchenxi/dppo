@@ -16,12 +16,12 @@ import cv2
 
 EP_MAX = 500000
 EP_LEN = 50
-N_WORKER = 1               # parallel workers
+N_WORKER = 8               # parallel workers
 GAMMA = 0.98                # reward discount factor
 LAM = 1
 LR = 0.0001
 
-BATCH_SIZE = 10240
+BATCH_SIZE = 512
 MIN_BATCH_SIZE = 256       # minimum batch size for updating PPO
 
 UPDATE_STEP = 10            # loop update operation n-steps
@@ -99,7 +99,7 @@ class PPO(object):
         # print(params)
 
         grads = tf.gradients(loss, params)
-        max_grad_norm = 0.5
+        max_grad_norm = 0.01
         if max_grad_norm is not None:
             grads_clipped, _grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
         grads_and_params = list(zip(grads_clipped, params))
@@ -118,7 +118,7 @@ class PPO(object):
         self.ratio = ratio
         self.grad_norm = _grad_norm
 
-        self.load_model()   
+        # self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')
@@ -446,24 +446,24 @@ class PPO(object):
                 # print("aloss: %7.4f|, vloss: %7.4f| entropy: %7.4f" % (aloss, vloss, entropy), grad_norm)
                 print(iteration)
 
-            feed_dict = {
-                self.tfs: s, 
-                self.tfa: a, 
-                self.tfdc_rs: rs, 
-                self.tfdc_rl: rl, 
-                self.tfadv: adv, 
-                self.tf_is_train: True
-            }
+            # feed_dict = {
+            #     self.tfs: s, 
+            #     self.tfa: a, 
+            #     self.tfdc_rs: rs, 
+            #     self.tfdc_rl: rl, 
+            #     self.tfadv: adv, 
+            #     self.tf_is_train: True
+            # }
             # onehota_prob, oldhota_prob, ratio = self.sess.run([self.a_prob, self.olda_prob, self.ratio], feed_dict = feed_dict)
             # for i in range(len(r)):
             #     print(onehota_prob[i], oldhota_prob[i], ratio[i])
 
-            ratio, vs, vl = self.sess.run([self.ratio, self.vs, self.vl], feed_dict = feed_dict)
-            ratio = ratio.flatten()
-            for i in range(len(rs)): #range(25):
-                print("%8.4f, %8.4f|, %8.4f, %8.4f|, %8.4f, %8.4f, %8.4f|, %8.4f|"%(rs[i], rl[i], vs[i], vl[i], adv_s[i], adv_l[i], adv[i], ratio[i]), info[i])
-                # print(a[i])
-                # print("%8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %6.0i, %8.4f"%(reward[i], r[i], vpred[i], vpred_new[i], adv[i], ratio[i], a[i], a_prob[i][act]), a_prob[i])
+            # ratio, vs, vl = self.sess.run([self.ratio, self.vs, self.vl], feed_dict = feed_dict)
+            # ratio = ratio.flatten()
+            # for i in range(len(rs)): #range(25):
+            #     print("%8.4f, %8.4f|, %8.4f, %8.4f|, %8.4f, %8.4f, %8.4f|, %8.4f|"%(rs[i], rl[i], vs[i], vl[i], adv_s[i], adv_l[i], adv[i], ratio[i]), info[i])
+            #     # print(a[i])
+            #     # print("%8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %6.0i, %8.4f"%(reward[i], r[i], vpred[i], vpred_new[i], adv[i], ratio[i], a[i], a_prob[i][act]), a_prob[i])
 
             print(rs.mean(), rl.mean())
 
@@ -817,7 +817,7 @@ class Worker(object):
             saved_ep = False
             
             s = self.env.reset( 0, 1, 1)
-
+            # a = self.ppo.choose_action(s, False)
             while(1):
                 if not ROLLING_EVENT.is_set():                  # while global PPO is updating
                     ROLLING_EVENT.wait()                        # wait until PPO is updated
@@ -826,34 +826,57 @@ class Worker(object):
                         # self.env.clear_history()
                     # self.test_model(5)
                     update_counter += 1
+                    break
 
                 a = self.ppo.choose_action(s, False)
-                print('action generated:', a)
-                # self.ppo.get_action_prob(s)
-                s_, r_short, r_long, done, info = self.env.step(a)
-                vpred_s, vpred_l = self.ppo.get_v(s)
+                    
+                # for i in range(len(a)-2):
+                #     a[i] = 0
+                
+                dist = dist = math.sqrt(a[-1]*a[-1] + a[-2]*a[-2])
+                steps_need = int(dist/0.05) + 1
+                # print(steps_need, a)
+                # s_, r_short, r_long, done, info = self.env.step(a)
 
-                GLOBAL_STEP += 1
+                r_short = 0
+                r_long = 0
 
-                # img = self.ppo.sess.run(self.ppo.img, feed_dict = {self.ppo.tfs:[s]})[0]
-                # plt.clf()
-                # plt.imshow(img)
-                # plt.pause(0.01)
+                a_ = a*1
+                a_sub = a*1
+                a_sub[-1] = a[-1]/steps_need
+                a_sub[-2] = a[-2]/steps_need  
+                if self.wid == 0:
+                    print(steps_need)         
+                for i in range(steps_need):
+                    s_, r_short, r_long, done, info = self.env.step(a_sub)
+                    # r_short += r_s 
+                    # r_long += r_l
+                    vpred_s, vpred_l = self.ppo.get_v(s)
+                    GLOBAL_STEP += 1
 
-                buffer_s.append(s*1)
-                buffer_a.append(a)
-                buffer_rs.append(r_short)                    # normalize reward, find to be useful
-                buffer_rl.append(r_long)
-                buffer_vpred_s.append(vpred_s)
-                buffer_vpred_l.append(vpred_l)
-                buffer_info.append(info)
-                s_demo = s_*1
-                GLOBAL_UPDATE_COUNTER += 1               # count to minimum batch size, no need to wait other workers
+                    # img = self.ppo.sess.run(self.ppo.img, feed_dict = {self.ppo.tfs:[s]})[0]
+                    # plt.clf()
+                    # plt.imshow(img)
+                    # plt.pause(0.01)
 
-                s = s_
-                t += 1
+                    a_[-1] = a[-1] + a_sub[-1]
+                    a_[-1] = a[-2] + a_sub[-2]
+                    buffer_s.append(s*1)
+                    buffer_a.append(a_)
+                    buffer_rs.append(r_short)                    # normalize reward, find to be useful
+                    buffer_rl.append(r_long)
+                    buffer_vpred_s.append(vpred_s)
+                    buffer_vpred_l.append(vpred_l)
+                    buffer_info.append(info)
+                    s_demo = s_*1
+                    GLOBAL_UPDATE_COUNTER += 1               # count to minimum batch size, no need to wait other workers
 
-                if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE or t == ep_length-1 or done:
+                    s = s_
+                    t += 1
+                    if (done and info != 'goal') or t >= ep_length-1:
+                        break                    
+
+                if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE or t >= ep_length-1 or done:
                     if self.wid == 0 and done and (info == 'fall' or info == 'out'):
                         # print(info)
                         step_left = ep_length - t

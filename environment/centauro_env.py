@@ -24,10 +24,10 @@ map_pixel = int(map_size/grid_size)
 observation_pixel = int(observation_range/grid_size)
 
 obstacle_num = 5
-observation_space = 48 + 3 #map_pixel*map_pixel + 25  # 60 x 60 + 8  2*3 + 2 + 2
+observation_space = 16 + 3 + 3 #map_pixel*map_pixel + 25  # 60 x 60 + 8  2*3 + 2 + 2
 # observation_space = obstacle_num*3 + 2 + 2
 
-action_space = 24 #len(action_list)
+action_space = 16 + 2 #len(action_list)
 action_type = spaces.Box(-1, 1, shape = (action_space,))
 # action_type = spaces.Discrete(action_space)
 
@@ -39,9 +39,11 @@ REWARD_CRASH = -0.2
 
 class Simu_env():
     def __init__(self, port_num):
+        self.state_pre = []
         self.goal_cound = 0
         self.reward_goal = REWARD_GOAL
         self.reward_crash = REWARD_CRASH
+        self.reward_step = REWARD_STEP
         self.action_list = action_list
         self.port_num = port_num
         self.dist_pre = 0
@@ -65,7 +67,8 @@ class Simu_env():
         # return spaces.Discrete(len(action_list))
 
     def convert_state(self, robot_state, target_state):
-        state = np.asarray(robot_state)
+        state = np.asarray(robot_state[:16])
+        state = np.append(state, robot_state[-3:])
         # observation = self.terrain_map.flatten()
         # target_info = state[3:5]
         # robot_info = state[-3:-1]
@@ -112,6 +115,8 @@ class Simu_env():
         # action = np.zeros(action_space)
         _, _, robot_state, _, found_pose = self.call_sim_function(lua_script_name, 'step', action)
         _, _, target_state, _, _ = self.call_sim_function(lua_script_name, 'get_target_state')
+        if self.state_pre == []:
+            self.state_pre = robot_state
 
         # print('rotob state', len(robot_state), robot_state)
 
@@ -126,6 +131,7 @@ class Simu_env():
         #compute reward and is_finish
         reward_short, reward_long, is_finish, info = self.compute_reward(robot_state, target_state, action, found_pose)
 
+        # print(robot_state)
         state_ = self.convert_state(robot_state, target_state)
 
         # return state_, reward, min_dist, obs_count, is_finish, info
@@ -136,6 +142,7 @@ class Simu_env():
         # tx, ty, ttheta, th, tl, obs..........  theta,  h,  h  leg, min_dist   
         # _, _, min_dist, _, _ = self.call_sim_function(lua_script_name, 'get_minimum_obs_dist') 
 
+        # state_diff = np.sum(abs(robot_state[24] - self.state_pre[24]))/math.pi
         _, _, g_pose, _, _ = self.call_sim_function(lua_script_name, 'get_robot_position')
 
         diff_x = abs(g_pose[0]-target_state[3])
@@ -175,18 +182,18 @@ class Simu_env():
         # print('dist', dist, target_state)
         if dist < 0.2 and info != 'crash': # and diff_l < 0.02:
         # if robot_state[2] > 0.2 and info != 'crash':
-            # is_finish = True
-            reward_long = REWARD_GOAL/10
+            is_finish = True
+            reward_long = REWARD_GOAL
             self.goal_cound += 1
-            if self.goal_cound > 3:
-                info = 'goal'
-                reward_long = REWARD_GOAL
-                is_finish = True
+            # if self.goal_cound > 3:
+            info = 'goal'
+            #     reward_long = REWARD_GOAL
+            #     is_finish = True
         else:
             self.goal_cound = 0
 
 
-        if abs(g_pose[0]) > 0.5 or abs(g_pose[1]) < -0.5: # or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
+        if abs(g_pose[0]) > 0.1 or g_pose[1] < -0.1: # or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
         # if abs(robot_state[1]) > 0.15 or robot_state[2] < -0.6:
             is_finish = True
             reward_short = -1
