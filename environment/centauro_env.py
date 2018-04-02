@@ -183,8 +183,8 @@ class Simu_env():
         if dist < 0.2 and info != 'crash': # and diff_l < 0.02:
         # if robot_state[2] > 0.2 and info != 'crash':
             is_finish = True
-            reward_long = REWARD_GOAL
-            self.goal_cound += 1
+            reward_long = REWARD_GOAL/10
+            # self.goal_cound += 1
             # if self.goal_cound > 3:
             info = 'goal'
             #     reward_long = REWARD_GOAL

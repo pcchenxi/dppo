@@ -188,6 +188,14 @@ function step(inInts,actions,inStrings,inBuffer)
     -- _current_ep = convert_current_ep()
     -- _current_tra[#_current_tra+1] = _current_ep
 
+    before_xyz = {}
+    before_ori = {}
+    local objects=simGetObjectsInTree(_base_hd,sim_handle_all,0)
+    for i=1,#objects,1 do
+        before_xyz[i] = simGetObjectPosition(objects[i], _base_hd)
+        before_ori[i] = simGetObjectOrientation(objects[i], _base_hd)    
+    end
+
     -- for i=1, 16, 1 do
     --     local hd = _joint_hds[i]
     --     -- simSetJointTargetVelocity(hd, 0.5*actions[i])
@@ -203,6 +211,7 @@ function step(inInts,actions,inStrings,inBuffer)
     pos[2] = actions[18]
     pos[3] = 0
     simSetObjectPosition(_base_hd, _base_hd, pos)
+
     -- simSetObjectOrientation(_base_hd, -1, ori)
 
     local objects=simGetObjectsInTree(_base_hd,sim_handle_all,0)
@@ -233,6 +242,22 @@ function step(inInts,actions,inStrings,inBuffer)
             break
         end
     end
+
+    -- local robot_pos = simGetObjectPosition(_base_hd, -1)
+    -- if math.abs(robot_pos[1]) > 0.1 or robot_pos[2] < -0.1 then 
+    --     res = 'a'
+    -- end 
+
+    -- if res ~= 't' then 
+    --     reset_joint(_joint_hds)
+    --     local objects=simGetObjectsInTree(_base_hd,sim_handle_all,0)
+    --     for i=1,#objects,1 do
+    --         simSetObjectPosition(objects[i], -1, before_xyz[i])
+    --         simSetObjectOrientation(objects[i], -1, before_ori[i])        
+    --         simResetDynamicObject(objects[i])
+    --     end        
+    -- end 
+
     joint_pose = get_joint_pos_vel(_joint_hds)
     robot_ori = simGetObjectOrientation(_robot_hd, -1)
 
