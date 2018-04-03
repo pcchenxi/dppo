@@ -27,7 +27,7 @@ obstacle_num = 5
 observation_space = 16 + 3 + 3 #map_pixel*map_pixel + 25  # 60 x 60 + 8  2*3 + 2 + 2
 # observation_space = obstacle_num*3 + 2 + 2
 
-action_space = 16 + 2 #len(action_list)
+action_space = 24 #len(action_list)
 action_type = spaces.Box(-1, 1, shape = (action_space,))
 # action_type = spaces.Discrete(action_space)
 
@@ -148,7 +148,7 @@ class Simu_env():
         diff_x = abs(g_pose[0]-target_state[3])
         diff_y = abs(g_pose[1]-target_state[4])
         dist = math.sqrt(diff_x*diff_x + diff_y*diff_y)
-        target_reward = -(dist - self.dist_pre)
+        target_reward = -(dist - self.dist_pre) * 10
 
         info = 'unfinish'
         is_finish = False
@@ -170,20 +170,22 @@ class Simu_env():
         if found_pose == bytearray(b"a"):       # when collision or no pose can be found
             is_finish = True
             # reward_short = -1
-            reward_long = REWARD_CRASH    
+            reward_long = REWARD_CRASH   
+            target_reward = 0 
             info = 'fall'
 
         if found_pose == bytearray(b"c"):       # when collision or no pose can be found
             is_finish = True
             # reward_short = -1
             reward_long = REWARD_CRASH
+            target_reward = 0
             info = 'crash'
 
         # print('dist', dist, target_state)
         if dist < 0.2 and info != 'crash': # and diff_l < 0.02:
         # if robot_state[2] > 0.2 and info != 'crash':
             is_finish = True
-            reward_long = REWARD_GOAL/10
+            reward_long = REWARD_GOAL
             # self.goal_cound += 1
             # if self.goal_cound > 3:
             info = 'goal'
@@ -193,7 +195,7 @@ class Simu_env():
             self.goal_cound = 0
 
 
-        if abs(g_pose[0]) > 0.1 or g_pose[1] < -0.1: # or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
+        if dist > 1: # abs(g_pose[0]) > 0.1 or g_pose[1] < -0.1: # or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
         # if abs(robot_state[1]) > 0.15 or robot_state[2] < -0.6:
             is_finish = True
             reward_short = -1

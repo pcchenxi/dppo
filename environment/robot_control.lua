@@ -21,6 +21,46 @@ collision_hd_2 = simGetCollectionHandle('obstacle_all')
 control_joint_hds = get_joint_hds(8)
 control_joint_hd_all = get_joint_hds(12)
 
+
+function move_toward_target(joint_hds, target_x, target_y)
+    local tan2 = math.atan2(target_x, target_y)
+    local velocity = 1
+    for i=17, 20, 1 do
+        simSetJointTargetPosition(joint_hds[i], tan2)
+    end
+    
+    for i=21, 24, 1 do
+        if i == 21 or i == 23 then
+            simSetJointTargetVelocity(joint_hds[i], velocity)
+        else
+            simSetJointTargetVelocity(joint_hds[i], -velocity)
+        end
+        --simSwitchThread()
+    end
+end  
+
+function rotate_robot(joint_hds, target_ori)
+
+    local velocity = -5*target_ori
+    for i=17, 20, 1 do
+        simSetJointTargetPosition(joint_hds[i], math.pi/2)
+    end    
+    for i=21, 24, 1 do
+        if i == 22 or i == 23 then
+            simSetJointTargetVelocity(joint_hds[i], -velocity)
+        else
+            simSetJointTargetVelocity(joint_hds[i], velocity)
+        end
+        --simSwitchThread()
+    end
+    sleep(0.5)
+    for i=21, 24, 1 do
+        if i == 22 or i == 23 then
+            simSetJointTargetVelocity(joint_hds[i], 0)
+        end
+    end    
+end
+
 function look_at_target()
     local t_pos = simGetObjectPosition(_target_hd, _head_check_hd)
     local hc_ori = simGetObjectOrientation(_head_check_hd,-1)

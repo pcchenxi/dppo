@@ -21,7 +21,7 @@ GAMMA = 0.98                # reward discount factor
 LAM = 1
 LR = 0.0001
 
-BATCH_SIZE = 512
+BATCH_SIZE = 20480
 MIN_BATCH_SIZE = 256       # minimum batch size for updating PPO
 
 UPDATE_STEP = 10            # loop update operation n-steps
@@ -118,7 +118,7 @@ class PPO(object):
         self.ratio = ratio
         self.grad_norm = _grad_norm
 
-        self.load_model()   
+        # self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')
@@ -833,24 +833,7 @@ class Worker(object):
                 # for i in range(len(a)-2):
                 #     a[i] = 0
                 
-                dist = dist = math.sqrt(a[-1]*a[-1] + a[-2]*a[-2])
-                steps_need = int(dist/0.1) + 1
-                # print(steps_need, a)
-                # s_, r_short, r_long, done, info = self.env.step(a)
-
-                r_short = 0
-                r_long = 0
-                for i in range(steps_need):
-                    a_ = a*1
-                    a_[-1] = a[-1]/steps_need
-                    a_[-2] = a[-2]/steps_need
-                    s_, r_s, r_l, done, info = self.env.step(a_)
-                    r_short += r_s 
-                    r_long += r_l
-                    t += 1
-                    if done or t >= ep_length-1:
-                        # r_long += (self.env.reward_step+0.05) * (steps_need-i)
-                        break
+                s_, r_short, r_long, done, info = self.env.step(a)
 
                 # print(a[-4:])
                 # print('action generated:', a)

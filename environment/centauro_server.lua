@@ -26,7 +26,7 @@ function start()
     -- print('reset')
     _base_hd = simGetObjectHandle('world_visual')
     _fake_robot_hd = simGetObjectHandle('fake_robot')
-    _robot_hd = simGetObjectHandle('world_visual')
+    _robot_hd = simGetObjectHandle('centauro')
     _target_hd = simGetObjectHandle('target')
     _joint_hds = get_joint_hds(24)
     _mode = simGetModelProperty(_robot_hd)
@@ -188,36 +188,47 @@ function step(inInts,actions,inStrings,inBuffer)
     -- _current_ep = convert_current_ep()
     -- _current_tra[#_current_tra+1] = _current_ep
 
-    before_xyz = {}
-    before_ori = {}
-    local objects=simGetObjectsInTree(_base_hd,sim_handle_all,0)
-    for i=1,#objects,1 do
-        before_xyz[i] = simGetObjectPosition(objects[i], _base_hd)
-        before_ori[i] = simGetObjectOrientation(objects[i], _base_hd)    
+    -- before_xyz = {}
+    -- before_ori = {}
+    -- local objects=simGetObjectsInTree(_base_hd,sim_handle_all,0)
+    -- for i=1,#objects,1 do
+    --     before_xyz[i] = simGetObjectPosition(objects[i], _base_hd)
+    --     before_ori[i] = simGetObjectOrientation(objects[i], _base_hd)    
+    -- end
+
+    for i =1, #actions, 1 do
+        if actions[i] < -0.33 then 
+            actions[i] = -1
+        elseif actions[i] > 0.33 then 
+            actions[i] = 1
+        else 
+            actions[i] = 0
+        end 
     end
 
-    -- for i=1, 16, 1 do
-    --     local hd = _joint_hds[i]
-    --     -- simSetJointTargetVelocity(hd, 0.5*actions[i])
-    --     simSetJointTargetPosition(hd, math.pi*actions[i]*0.5)
-    --     --simSetJointForce(hd, 100)
-    -- end 
-
-    -- move robot base
-    -- ori = simGetObjectOrientation(_base_hd, -1)
-    -- ori[3] = math.random() * math.pi*2
-    local pos = {}
-    pos[1] = actions[17]
-    pos[2] = actions[18]
-    pos[3] = 0
-    simSetObjectPosition(_base_hd, _base_hd, pos)
-
-    -- simSetObjectOrientation(_base_hd, -1, ori)
-
-    local objects=simGetObjectsInTree(_base_hd,sim_handle_all,0)
-    for i=1,#objects,1 do       
-        simResetDynamicObject(objects[i])
-    end
+    local robot_joints = get_joint_values(_joint_hds)
+    for i=1, 20, 1 do
+        local hd = _joint_hds[i]
+        -- simSetJointTargetVelocity(hd, 0.5*actions[i])
+        local joint_v = robot_joints[i] + math.pi*actions[i]*5/180
+        simSetJointTargetPosition(hd, joint_v)
+        --simSetJointForce(hd, 100)
+    end 
+    for i=21, 24, 1 do
+        local hd = _joint_hds[i]
+        simSetJointTargetVelocity(hd, 0.5*actions[i])
+        --simSetJointForce(hd, 100)
+    end 
+    -- -- move robot base
+    -- local pos = {}
+    -- pos[1] = actions[17] * 0.05
+    -- pos[2] = actions[18] * 0.05
+    -- pos[3] = 0
+    -- simSetObjectPosition(_base_hd, _base_hd, pos)
+    -- local objects=simGetObjectsInTree(_base_hd,sim_handle_all,0)
+    -- for i=1,#objects,1 do       
+    --     simResetDynamicObject(objects[i])
+    -- end
 
     -- check collision
     local res, data = simCheckDistance(_collection_robot_hd, _collection_hd, 0.05)
