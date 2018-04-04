@@ -182,14 +182,16 @@ function reset(inInts,inFloats,inStrings,inBuffer)
 end
 
 function step(inInts,actions,inStrings,inBuffer)
-    if actions[18] > -10 then
+    if actions[#actions] > -10 then
         local robot_joints = get_joint_values(_joint_hds)
         for i=1, 16, 1 do
-            local hd = _joint_hds[i]
-            -- simSetJointTargetVelocity(hd, 0.5*actions[i])
-            local joint_v = robot_joints[i] + math.pi*actions[i]*10/180
-            simSetJointTargetPosition(hd, joint_v)
-            --simSetJointForce(hd, 100)
+            if actions[i] >= -1 then 
+                local hd = _joint_hds[i]
+                simSetJointTargetVelocity(hd, 0.2*actions[i])
+                -- local joint_v = robot_joints[i] + math.pi*actions[i]*10/180
+                -- simSetJointTargetPosition(hd, joint_v)
+                --simSetJointForce(hd, 100)
+            end
         end 
         -- for i=21, 24, 1 do
         --     local hd = _joint_hds[i]
@@ -197,14 +199,12 @@ function step(inInts,actions,inStrings,inBuffer)
         --     --simSetJointForce(hd, 100)
         -- end 
         -- -- move robot base
-
-        move_robot(_joint_hds, actions[17], actions[18])
-    elseif actions[18] == -11 then 
-        for i=21, 24, 1 do
-            simSetJointTargetVelocity(_joint_hds[i], 0)
-        end
+        
+        -- rotate_robot(_joint_hds, actions[#actions-2])
+        move_robot(_joint_hds, actions[#actions-1], actions[#actions])
+        -- _, v = simGetObjectFloatParameter(_joint_hds[17], 2012)
+        -- print('velocity', v)
     end
-
     -- check collision
     local res, data = simCheckDistance(_collection_robot_hd, _collection_hd, 0.05)
     if data ~= nil then 

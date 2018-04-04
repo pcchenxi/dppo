@@ -24,7 +24,7 @@ map_pixel = int(map_size/grid_size)
 observation_pixel = int(observation_range/grid_size)
 
 obstacle_num = 5
-observation_space = 16 + 3 + 3 #map_pixel*map_pixel + 25  # 60 x 60 + 8  2*3 + 2 + 2
+observation_space = 16 + 3 + 3 + 3 #map_pixel*map_pixel + 25  # 60 x 60 + 8  2*3 + 2 + 2
 # observation_space = obstacle_num*3 + 2 + 2
 
 action_space = 16 + 2 #len(action_list)
@@ -34,7 +34,7 @@ action_type = spaces.Box(-1, 1, shape = (action_space,))
 lua_script_name = 'world_visual'
 
 REWARD_GOAL = 5
-REWARD_STEP =  -0.05
+REWARD_STEP =  -0.03
 REWARD_CRASH = -0.5
 
 class Simu_env():
@@ -67,9 +67,10 @@ class Simu_env():
         return spaces.Box(-1, 1, shape = (5,))
         # return spaces.Discrete(len(action_list))
 
-    def convert_state(self, robot_state, target_state):
+    def convert_state(self, robot_state, target_state, rot_vel):
         state = np.asarray(robot_state[:16])
         state = np.append(state, robot_state[-3:])
+        state = np.append(state, rot_vel)
         # observation = self.terrain_map.flatten()
         # target_info = state[3:5]
         # robot_info = state[-3:-1]
@@ -107,12 +108,13 @@ class Simu_env():
         _, _, target_state, _, _ = self.call_sim_function(lua_script_name, 'get_target_state')                
         _, _, robot_state, _, _ = self.call_sim_function(lua_script_name, 'get_robot_state')
         _, _, g_pose, _, _ = self.call_sim_function(lua_script_name, 'get_robot_position')
+        _, _, rot_vel, _, _ = self.call_sim_function('GyroSensor', 'get_rot_vel') 
 
         diff_x = abs(g_pose[0]-target_state[3])
         diff_y = abs(g_pose[1]-target_state[4])
         self.dist_pre = math.sqrt(diff_x*diff_x + diff_y*diff_y)
 
-        state = self.convert_state(robot_state, target_state)
+        state = self.convert_state(robot_state, target_state, rot_vel)
 
         return state
 
@@ -122,61 +124,26 @@ class Simu_env():
                 action = [0,0,0,0,0]
             else:            
                 action = action_list[action]
-        # action = np.zeros(action_space)
-        dist_scale = 0.1
-        dist_need_to_move = math.sqrt(action[-1]*action[-1] + action[-2]*action[-2]) * dist_scale
-        _, _, g_pose_start, _, _ = self.call_sim_function(lua_script_name, 'get_robot_position')
-
-        robot_state, target_state, found_pose, is_finish, info = [], [], [], [], []
-        reward_short, reward_long, dist_moved = 0, 0, 0
 
         _, _, robot_state, _, found_pose = self.call_sim_function(lua_script_name, 'step', action)
-        _, _, target_state, _, _ = self.call_sim_function(lua_script_name, 'get_target_state')        
+        # time.sleep(0.2)
+        _, _, robot_state, _, _ = self.call_sim_function(lua_script_name, 'get_robot_state')
+        _, _, target_state, _, _ = self.call_sim_function(lua_script_name, 'get_target_state') 
+        _, _, rot_vel, _, _ = self.call_sim_function('GyroSensor', 'get_rot_vel') 
+
         reward_short, reward_long, is_finish, info = self.compute_reward(robot_state, target_state, action, found_pose)
 
-        action_cpy = action*1
-        while dist_moved < dist_need_to_move:
-            _, _, g_pose_now, _, _ = self.call_sim_function(lua_script_name, 'get_robot_position')
-            diff_x = abs(g_pose_now[0] - g_pose_start[0])
-            diff_y = abs(g_pose_now[1] - g_pose_start[1])
-            dist_moved = math.sqrt(diff_x*diff_x + diff_y*diff_y)
-
-            # print(dist_moved, dist_need_to_move)
-            action_cpy[-1] = -10
-            _, _, robot_state, _, found_pose = self.call_sim_function(lua_script_name, 'step', action_cpy)
-
-            _, _, target_state, _, _ = self.call_sim_function(lua_script_name, 'get_target_state')
-            if self.state_pre == []:
-                self.state_pre = robot_state
-                self.action_pre = action
-
-            #compute reward and is_finish
-            r_s, r_l, is_finish, info = self.compute_reward(robot_state, target_state, action, found_pose)
-
-            reward_short += r_s 
-            reward_long += r_l
-            if is_finish:
-                break
-
-        # action_cpy[-1] = -11
-        # _, _, robot_state, _, found_pose = self.call_sim_function(lua_script_name, 'step', action_cpy)
-
-        _, _, target_state, _, _ = self.call_sim_function(lua_script_name, 'get_target_state')        
-        _, _, is_finish, info = self.compute_reward(robot_state, target_state, action, found_pose)
-        # action_cost = np.sum(action * action)
-        # reward_long += action_cost * 0.02
-
-        # if info == 'goal':
-        #     reward_long += REWARD_GOAL
-        #     is_finish = True
-
-        state_ = self.convert_state(robot_state, target_state)
+        state_ = self.convert_state(robot_state, target_state, rot_vel)
 
         return state_, reward_short, reward_long, is_finish, info
 
     def compute_reward(self, robot_state, target_state, action, found_pose):
         # state_diff = np.sum(abs(robot_state[24] - self.state_pre[24]))/math.pi
         _, _, g_pose, _, _ = self.call_sim_function(lua_script_name, 'get_robot_position')
+        _, _, acc, _, _ = self.call_sim_function('Accelerometer', 'get_acc_data')
+
+        sum_acc = np.sum(acc)
+        # print(acc, sum_acc)
 
         diff_x = abs(g_pose[0]-target_state[3])
         diff_y = abs(g_pose[1]-target_state[4])
@@ -242,7 +209,7 @@ class Simu_env():
             reward_long = REWARD_CRASH
             info = 'out'
 
-        reward = reward_long + 5*target_reward + alive_reward + action_cost*0.02 + REWARD_STEP
+        reward = (reward_long + 5*target_reward + alive_reward - sum_acc*0.05 + REWARD_STEP) * 0.5
         return reward_short, reward, is_finish, info
 
     ####################################  interface funcytion  ###################################

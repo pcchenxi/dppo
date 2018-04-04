@@ -22,9 +22,18 @@ control_joint_hds = get_joint_hds(8)
 control_joint_hd_all = get_joint_hds(12)
 
 
-function move_toward_target(joint_hds, target_x, target_y)
+function move_robot(joint_hds, target_x, target_y)
+    if target_x < -1 then      
+        return 0
+    end    
+    if target_x == 0 and target_y == 0 then 
+        for i=21, 24, 1 do
+            simSetJointTargetVelocity(joint_hds[i], 0)
+        end        
+        return 0
+    end
     local tan2 = math.atan2(target_x, target_y)
-    local velocity = 1
+    local velocity = math.sqrt(target_x*target_x + target_y*target_y)
     for i=17, 20, 1 do
         simSetJointTargetPosition(joint_hds[i], tan2)
     end
@@ -40,7 +49,9 @@ function move_toward_target(joint_hds, target_x, target_y)
 end  
 
 function rotate_robot(joint_hds, target_ori)
-
+    if target_ori < -1 then 
+        return 0
+    end
     local velocity = -5*target_ori
     for i=17, 20, 1 do
         simSetJointTargetPosition(joint_hds[i], math.pi/2)
@@ -53,12 +64,12 @@ function rotate_robot(joint_hds, target_ori)
         end
         --simSwitchThread()
     end
-    sleep(0.5)
-    for i=21, 24, 1 do
-        if i == 22 or i == 23 then
-            simSetJointTargetVelocity(joint_hds[i], 0)
-        end
-    end    
+    -- sleep(0.5)
+    -- for i=21, 24, 1 do
+    --     if i == 22 or i == 23 then
+    --         simSetJointTargetVelocity(joint_hds[i], 0)
+    --     end
+    -- end    
 end
 
 function look_at_target()

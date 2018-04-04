@@ -15,16 +15,16 @@ import joblib, time
 import cv2
 
 EP_MAX = 500000
-EP_LEN = 30
+EP_LEN = 50
 N_WORKER = 8               # parallel workers
 GAMMA = 0.98                # reward discount factor
 LAM = 1
 LR = 0.0001
 
 BATCH_SIZE = 2048
-MIN_BATCH_SIZE = 256       # minimum batch size for updating PPO
+MIN_BATCH_SIZE = BATCH_SIZE       # minimum batch size for updating PPO
 
-UPDATE_STEP = 10            # loop update operation n-steps
+UPDATE_STEP = 5            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
 S_DIM, A_DIM = centauro_env.observation_space, centauro_env.action_space 
 Action_Space = centauro_env.action_type
@@ -411,13 +411,14 @@ class PPO(object):
 
             for iteration in range(UPDATE_STEP):
                 # construct reward predict data                
-                s_, a_, rs_, rl_, adv_ = self.shuffel_data(s, a, rs, rl, adv)   
+                # s_, a_, rs_, rl_, adv_ = self.shuffel_data(s, a, rs, rl, adv)   
+                s_, a_, rs_, rl_, adv_ = s, a, rs, rl, adv
                 count = 0
                 for start in range(0, len(rs), MIN_BATCH_SIZE):
-                    end = start + MIN_BATCH_SIZE
-                    if end > len(rs) - 1 and count != 0:
+                    end = start + MIN_BATCH_SIZE -1
+                    if end >= len(rs) and count != 0:
                         break
-                    if  end > len(rs) - 1 and count == 0:
+                    if  end >= len(rs) and count == 0:
                         end = len(rs)-1
                     count += 1
 
@@ -833,8 +834,8 @@ class Worker(object):
 
                 a = self.ppo.choose_action(s, False)
                     
-                for i in range(len(a)-2):
-                    a[i] = 0
+                # for i in range(len(a)-2):
+                #     a[i] = 0
                 
                 s_, r_short, r_long, done, info = self.env.step(a)
 
@@ -884,6 +885,7 @@ class Worker(object):
                     #         print('generage new batch:', len(aug_a))
 
                     buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
+                    print("step collected:: %7.4f| %7.4f| %7.4f" %(GLOBAL_UPDATE_COUNTER/BATCH_SIZE, GLOBAL_UPDATE_COUNTER, BATCH_SIZE))
                     if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE:
                         ROLLING_EVENT.clear()       # stop collecting data
                         UPDATE_EVENT.set()          # globalPPO update

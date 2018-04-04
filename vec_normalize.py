@@ -21,9 +21,9 @@ class VecNormalize(object):
         self.gamma = gamma
         self.epsilon = epsilon
 
-        self.ret_l_rms.var = np.load('./ret_var.npy')
-        self.ob_rms.mean = np.load('./ob_mean.npy')
-        self.ob_rms.var = np.load('./ob_var.npy')
+        # self.ret_l_rms.var = np.load('./ret_var.npy')
+        # self.ob_rms.mean = np.load('./ob_mean.npy')
+        # self.ob_rms.var = np.load('./ob_var.npy')
 
         self.count = 0
 
@@ -37,20 +37,20 @@ class VecNormalize(object):
         obs, rews_s, rews_l, news, infos = self.venv.step(vac)
         self.ret_s = self.ret_s * self.gamma*0.7 + rews_s
         self.ret_l = self.ret_l * self.gamma + rews_l
-        # obs = self._obfilt(obs)
+        obs = self._obfilt(obs)
         # if self.ret_s_rms: 
         #     self.ret_s_rms.update((self.ret_s + self.ret_l)/2)
         #     rews_s = np.clip(rews_s / np.sqrt(self.ret_s_rms.var + self.epsilon), -self.cliprew, self.cliprew)
         #     rews_l = np.clip(rews_l / np.sqrt(self.ret_s_rms.var + self.epsilon), -self.cliprew, self.cliprew)
         if self.ret_l_rms: 
-            # self.ret_l_rms.update(self.ret_l)
-            rews_l = np.clip(rews_l / np.sqrt(self.ret_l_rms.var + self.epsilon), -self.cliprew, self.cliprew)
+            self.ret_l_rms.update(self.ret_l)
+            # rews_l = np.clip(rews_l / np.sqrt(self.ret_l_rms.var + self.epsilon), -self.cliprew, self.cliprew)
 
-        # if self.count > 1000:
-        #     np.save('./ob_mean', self.ob_rms.mean)
-        #     np.save('./ob_var', self.ob_rms.var)            
-        #     np.save('./ret_var', self.ret_l_rms.var)
-        #     self.count = 0
+        if self.count > 1000:
+            np.save('./ob_mean', self.ob_rms.mean)
+            np.save('./ob_var', self.ob_rms.var)            
+            np.save('./ret_var', self.ret_l_rms.var)
+            self.count = 0
 
         # self.count += 1
 
