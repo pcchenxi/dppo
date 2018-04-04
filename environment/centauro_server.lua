@@ -182,53 +182,28 @@ function reset(inInts,inFloats,inStrings,inBuffer)
 end
 
 function step(inInts,actions,inStrings,inBuffer)
-    -- print('step')
-    -- _pre_ep = convert_current_ep()
-    -- res = do_action_rl(_robot_hd, inFloats)
-    -- _current_ep = convert_current_ep()
-    -- _current_tra[#_current_tra+1] = _current_ep
-
-    -- before_xyz = {}
-    -- before_ori = {}
-    -- local objects=simGetObjectsInTree(_base_hd,sim_handle_all,0)
-    -- for i=1,#objects,1 do
-    --     before_xyz[i] = simGetObjectPosition(objects[i], _base_hd)
-    --     before_ori[i] = simGetObjectOrientation(objects[i], _base_hd)    
-    -- end
-
-    for i =1, #actions, 1 do
-        if actions[i] < -0.33 then 
-            actions[i] = -1
-        elseif actions[i] > 0.33 then 
-            actions[i] = 1
-        else 
-            actions[i] = 0
+    if actions[18] > -10 then
+        local robot_joints = get_joint_values(_joint_hds)
+        for i=1, 16, 1 do
+            local hd = _joint_hds[i]
+            -- simSetJointTargetVelocity(hd, 0.5*actions[i])
+            local joint_v = robot_joints[i] + math.pi*actions[i]*10/180
+            simSetJointTargetPosition(hd, joint_v)
+            --simSetJointForce(hd, 100)
         end 
-    end
+        -- for i=21, 24, 1 do
+        --     local hd = _joint_hds[i]
+        --     simSetJointTargetVelocity(hd, 0.5*actions[i])
+        --     --simSetJointForce(hd, 100)
+        -- end 
+        -- -- move robot base
 
-    local robot_joints = get_joint_values(_joint_hds)
-    for i=1, 20, 1 do
-        local hd = _joint_hds[i]
-        -- simSetJointTargetVelocity(hd, 0.5*actions[i])
-        local joint_v = robot_joints[i] + math.pi*actions[i]*5/180
-        simSetJointTargetPosition(hd, joint_v)
-        --simSetJointForce(hd, 100)
-    end 
-    for i=21, 24, 1 do
-        local hd = _joint_hds[i]
-        simSetJointTargetVelocity(hd, 0.5*actions[i])
-        --simSetJointForce(hd, 100)
-    end 
-    -- -- move robot base
-    -- local pos = {}
-    -- pos[1] = actions[17] * 0.05
-    -- pos[2] = actions[18] * 0.05
-    -- pos[3] = 0
-    -- simSetObjectPosition(_base_hd, _base_hd, pos)
-    -- local objects=simGetObjectsInTree(_base_hd,sim_handle_all,0)
-    -- for i=1,#objects,1 do       
-    --     simResetDynamicObject(objects[i])
-    -- end
+        move_robot(_joint_hds, actions[17], actions[18])
+    elseif actions[18] == -11 then 
+        for i=21, 24, 1 do
+            simSetJointTargetVelocity(_joint_hds[i], 0)
+        end
+    end
 
     -- check collision
     local res, data = simCheckDistance(_collection_robot_hd, _collection_hd, 0.05)
@@ -254,27 +229,7 @@ function step(inInts,actions,inStrings,inBuffer)
         end
     end
 
-    -- local robot_pos = simGetObjectPosition(_base_hd, -1)
-    -- if math.abs(robot_pos[1]) > 0.1 or robot_pos[2] < -0.1 then 
-    --     res = 'a'
-    -- end 
-
-    -- if res ~= 't' then 
-    --     reset_joint(_joint_hds)
-    --     local objects=simGetObjectsInTree(_base_hd,sim_handle_all,0)
-    --     for i=1,#objects,1 do
-    --         simSetObjectPosition(objects[i], -1, before_xyz[i])
-    --         simSetObjectOrientation(objects[i], -1, before_ori[i])        
-    --         simResetDynamicObject(objects[i])
-    --     end        
-    -- end 
-
-    joint_pose = get_joint_pos_vel(_joint_hds)
-    robot_ori = simGetObjectOrientation(_robot_hd, -1)
-
-    joint_pose[#joint_pose+1] = robot_ori[1]
-    joint_pose[#joint_pose+1] = robot_ori[2]
-    joint_pose[#joint_pose+1] = robot_ori[3]
+    _, joint_pose, _, _ = get_robot_state()
     return {}, joint_pose, {}, res
 end
 
@@ -336,16 +291,6 @@ function save_ep(inInts,inFloats,inStrings,inBuffer)
     return {}, {}, {}, ''
 end
 
-function move_robot(inInts,inFloats,inStrings,inBuffer)
-    -- print('step')
-    local robot_pos = simGetObjectPosition(_robot_hd, -1)
-    robot_pos[1] =  inFloats[1]
-    robot_pos[2] =  inFloats[2]
-
-    simSetObjectPosition(_robot_hd, -1, robot_pos)
-    return {}, {}, {}, ''
-end
-
 function get_obstacle_info(inInts,inFloats,inStrings,inBuffer)
     local obs_info = {}
     for i=1, #_obs_hds, 1 do 
@@ -383,6 +328,11 @@ end
 
 function get_robot_state(inInts,inFloats,inStrings,inBuffer)  
     local joint_pose = get_joint_pos_vel(_joint_hds)
+    robot_ori = simGetObjectOrientation(_robot_hd, -1)
+
+    joint_pose[#joint_pose+1] = robot_ori[1]
+    joint_pose[#joint_pose+1] = robot_ori[2]
+    joint_pose[#joint_pose+1] = robot_ori[3]    
     return {}, joint_pose, {}, ''
 end
 

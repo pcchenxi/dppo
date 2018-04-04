@@ -15,13 +15,13 @@ import joblib, time
 import cv2
 
 EP_MAX = 500000
-EP_LEN = 50
+EP_LEN = 30
 N_WORKER = 8               # parallel workers
 GAMMA = 0.98                # reward discount factor
 LAM = 1
 LR = 0.0001
 
-BATCH_SIZE = 20480
+BATCH_SIZE = 2048
 MIN_BATCH_SIZE = 256       # minimum batch size for updating PPO
 
 UPDATE_STEP = 10            # loop update operation n-steps
@@ -86,7 +86,7 @@ class PPO(object):
         vpredclipped = oldvl + tf.clip_by_value(self.vl - oldvl, - EPSILON, EPSILON)
         vf_losses1 = tf.square(self.vl - self.tfdc_rl)
         vf_losses2 = tf.square(vpredclipped - self.tfdc_rl)
-        vf_loss = 1 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
+        vf_loss = 0.5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
         ratio = tf.exp(OLDNEGLOGPAC - neglogpac)
         pg_losses = -self.tfadv * ratio
         pg_losses2 = -self.tfadv * tf.clip_by_value(ratio, 1.0 - EPSILON, 1.0 + EPSILON)
@@ -99,7 +99,7 @@ class PPO(object):
         # print(params)
 
         grads = tf.gradients(loss, params)
-        max_grad_norm = 0.01
+        max_grad_norm = 0.05
         if max_grad_norm is not None:
             grads_clipped, _grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
         grads_and_params = list(zip(grads_clipped, params))
@@ -476,6 +476,7 @@ class PPO(object):
             self.write_summary('Loss/v loss', vloss) 
             self.write_summary('Loss/grad norm', grad_norm) 
             self.write_summary('Perf/mean_ret', ret_mean)  
+            self.write_summary('Perf/mean_rew', r_mean)  
 
             model_index = int(G_ITERATION / 10)
             self.saver.save(self.sess, './model/rl/model_' + str(model_index) + '.cptk') 
@@ -804,6 +805,8 @@ class Worker(object):
 
         update_counter = 0
         ep_count = 0
+        if self.wid == N_WORKER - 1:
+            time.sleep(1)
 
         while not COORD.should_stop():
             buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
@@ -830,12 +833,13 @@ class Worker(object):
 
                 a = self.ppo.choose_action(s, False)
                     
-                # for i in range(len(a)-2):
-                #     a[i] = 0
+                for i in range(len(a)-2):
+                    a[i] = 0
                 
                 s_, r_short, r_long, done, info = self.env.step(a)
 
-                # print(a[-4:])
+                if self.wid == 0:
+                    print(a[-2:])
                 # print('action generated:', a)
                 # self.ppo.get_action_prob(s)
                 vpred_s, vpred_l = self.ppo.get_v(s)

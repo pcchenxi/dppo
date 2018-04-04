@@ -27,19 +27,20 @@ obstacle_num = 5
 observation_space = 16 + 3 + 3 #map_pixel*map_pixel + 25  # 60 x 60 + 8  2*3 + 2 + 2
 # observation_space = obstacle_num*3 + 2 + 2
 
-action_space = 24 #len(action_list)
+action_space = 16 + 2 #len(action_list)
 action_type = spaces.Box(-1, 1, shape = (action_space,))
 # action_type = spaces.Discrete(action_space)
 
 lua_script_name = 'world_visual'
 
-REWARD_GOAL = 10
+REWARD_GOAL = 5
 REWARD_STEP =  -0.05
-REWARD_CRASH = -0.2
+REWARD_CRASH = -0.5
 
 class Simu_env():
     def __init__(self, port_num):
         self.state_pre = []
+        self.action_pre = []
         self.goal_cound = 0
         self.reward_goal = REWARD_GOAL
         self.reward_crash = REWARD_CRASH
@@ -99,10 +100,19 @@ class Simu_env():
         res, retInts, retFloats, retStrings, retBuffer = self.call_sim_function(lua_script_name, 'reset', [target_dist, env_mode, reset_mode, save_ep])        
         # state, reward, min_dist, obs_count, is_finish, info = self.step([0, 0, 0, 0, 0])
         
-        action = np.zeros(action_space)
-        state, reward_short, reward_long, is_finish, info = self.step(action)
+        # action = np.zeros(action_space)
+        # state, reward_short, reward_long, is_finish, info = self.step(action)
 
         # print('after reset', self.dist_pre)
+        _, _, target_state, _, _ = self.call_sim_function(lua_script_name, 'get_target_state')                
+        _, _, robot_state, _, _ = self.call_sim_function(lua_script_name, 'get_robot_state')
+        _, _, g_pose, _, _ = self.call_sim_function(lua_script_name, 'get_robot_position')
+
+        diff_x = abs(g_pose[0]-target_state[3])
+        diff_y = abs(g_pose[1]-target_state[4])
+        self.dist_pre = math.sqrt(diff_x*diff_x + diff_y*diff_y)
+
+        state = self.convert_state(robot_state, target_state)
 
         return state
 
@@ -113,47 +123,74 @@ class Simu_env():
             else:            
                 action = action_list[action]
         # action = np.zeros(action_space)
+        dist_scale = 0.1
+        dist_need_to_move = math.sqrt(action[-1]*action[-1] + action[-2]*action[-2]) * dist_scale
+        _, _, g_pose_start, _, _ = self.call_sim_function(lua_script_name, 'get_robot_position')
+
+        robot_state, target_state, found_pose, is_finish, info = [], [], [], [], []
+        reward_short, reward_long, dist_moved = 0, 0, 0
+
         _, _, robot_state, _, found_pose = self.call_sim_function(lua_script_name, 'step', action)
-        _, _, target_state, _, _ = self.call_sim_function(lua_script_name, 'get_target_state')
-        if self.state_pre == []:
-            self.state_pre = robot_state
-
-        # print('rotob state', len(robot_state), robot_state)
-
-        # _, _, _, _, found_pose = self.call_sim_function(lua_script_name, 'step', action)
-
-        # obs_grid = self.get_observation_gridmap(robot_state[0], robot_state[1])
-        # self.get_terrain_map(robot_state[2], robot_state[3], robot_state[-3], robot_state[-2])
-        # plt.clf()
-        # plt.imshow(self.terrain_map)
-        # plt.pause(0.01)
-
-        #compute reward and is_finish
+        _, _, target_state, _, _ = self.call_sim_function(lua_script_name, 'get_target_state')        
         reward_short, reward_long, is_finish, info = self.compute_reward(robot_state, target_state, action, found_pose)
 
-        # print(robot_state)
+        action_cpy = action*1
+        while dist_moved < dist_need_to_move:
+            _, _, g_pose_now, _, _ = self.call_sim_function(lua_script_name, 'get_robot_position')
+            diff_x = abs(g_pose_now[0] - g_pose_start[0])
+            diff_y = abs(g_pose_now[1] - g_pose_start[1])
+            dist_moved = math.sqrt(diff_x*diff_x + diff_y*diff_y)
+
+            # print(dist_moved, dist_need_to_move)
+            action_cpy[-1] = -10
+            _, _, robot_state, _, found_pose = self.call_sim_function(lua_script_name, 'step', action_cpy)
+
+            _, _, target_state, _, _ = self.call_sim_function(lua_script_name, 'get_target_state')
+            if self.state_pre == []:
+                self.state_pre = robot_state
+                self.action_pre = action
+
+            #compute reward and is_finish
+            r_s, r_l, is_finish, info = self.compute_reward(robot_state, target_state, action, found_pose)
+
+            reward_short += r_s 
+            reward_long += r_l
+            if is_finish:
+                break
+
+        # action_cpy[-1] = -11
+        # _, _, robot_state, _, found_pose = self.call_sim_function(lua_script_name, 'step', action_cpy)
+
+        _, _, target_state, _, _ = self.call_sim_function(lua_script_name, 'get_target_state')        
+        _, _, is_finish, info = self.compute_reward(robot_state, target_state, action, found_pose)
+        # action_cost = np.sum(action * action)
+        # reward_long += action_cost * 0.02
+
+        # if info == 'goal':
+        #     reward_long += REWARD_GOAL
+        #     is_finish = True
+
         state_ = self.convert_state(robot_state, target_state)
 
-        # return state_, reward, min_dist, obs_count, is_finish, info
         return state_, reward_short, reward_long, is_finish, info
 
     def compute_reward(self, robot_state, target_state, action, found_pose):
-        # 0,  1,  2,      3,  4,  5              -5,    -4, -3, -2, -1 
-        # tx, ty, ttheta, th, tl, obs..........  theta,  h,  h  leg, min_dist   
-        # _, _, min_dist, _, _ = self.call_sim_function(lua_script_name, 'get_minimum_obs_dist') 
-
         # state_diff = np.sum(abs(robot_state[24] - self.state_pre[24]))/math.pi
         _, _, g_pose, _, _ = self.call_sim_function(lua_script_name, 'get_robot_position')
 
         diff_x = abs(g_pose[0]-target_state[3])
         diff_y = abs(g_pose[1]-target_state[4])
         dist = math.sqrt(diff_x*diff_x + diff_y*diff_y)
-        target_reward = -(dist - self.dist_pre) * 10
+        target_reward = -(dist - self.dist_pre)
+        alive_reward = 0.02
 
         info = 'unfinish'
         is_finish = False
 
-        action = np.asarray(action)
+        # action = np.asarray(action)
+        # action_diff = abs(action - self.action_pre)
+        action_cost = -np.sum(action * action)
+
         reward_short = 0 #REWARD_GOAL/2 #REWARD_CRASH/(self.max_length*2)
         reward_long = 0
 
@@ -172,12 +209,14 @@ class Simu_env():
             # reward_short = -1
             reward_long = REWARD_CRASH   
             target_reward = 0 
+            alive_reward = 0
             info = 'fall'
 
         if found_pose == bytearray(b"c"):       # when collision or no pose can be found
             is_finish = True
             # reward_short = -1
             reward_long = REWARD_CRASH
+            alive_reward = 0
             target_reward = 0
             info = 'crash'
 
@@ -195,15 +234,16 @@ class Simu_env():
             self.goal_cound = 0
 
 
-        if dist > 1: # abs(g_pose[0]) > 0.1 or g_pose[1] < -0.1: # or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
+        if dist > 1: # 
+        # if abs(g_pose[0]) > 0.1 or g_pose[1] < -0.1: # or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
         # if abs(robot_state[1]) > 0.15 or robot_state[2] < -0.6:
             is_finish = True
             reward_short = -1
             reward_long = REWARD_CRASH
             info = 'out'
 
-        reward_long += target_reward + REWARD_STEP
-        return reward_short, reward_long, is_finish, info
+        reward = reward_long + 5*target_reward + alive_reward + action_cost*0.02 + REWARD_STEP
+        return reward_short, reward, is_finish, info
 
     ####################################  interface funcytion  ###################################
     def save_ep(self):
@@ -257,7 +297,7 @@ class Simu_env():
         # vrep.simxSynchronous(self.clientID,True)
         # then start the simulation:
         e = vrep.simxStartSimulation(self.clientID,vrep.simx_opmode_blocking)
-        time.sleep(1)
+        # time.sleep(0.5)
 
     def connect_vrep(self):
         clientID = vrep.simxStart('127.0.0.1', self.port_num, True, True, 5000, 5)

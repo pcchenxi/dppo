@@ -21,9 +21,9 @@ class VecNormalize(object):
         self.gamma = gamma
         self.epsilon = epsilon
 
-        # self.ret_l_rms.var = np.load('./ret_var.npy')
-        # self.ob_rms.mean = np.load('./ob_mean.npy')
-        # self.ob_rms.var = np.load('./ob_var.npy')
+        self.ret_l_rms.var = np.load('./ret_var.npy')
+        self.ob_rms.mean = np.load('./ob_mean.npy')
+        self.ob_rms.var = np.load('./ob_var.npy')
 
         self.count = 0
 
@@ -37,28 +37,28 @@ class VecNormalize(object):
         obs, rews_s, rews_l, news, infos = self.venv.step(vac)
         self.ret_s = self.ret_s * self.gamma*0.7 + rews_s
         self.ret_l = self.ret_l * self.gamma + rews_l
-        obs = self._obfilt(obs)
+        # obs = self._obfilt(obs)
         # if self.ret_s_rms: 
         #     self.ret_s_rms.update((self.ret_s + self.ret_l)/2)
         #     rews_s = np.clip(rews_s / np.sqrt(self.ret_s_rms.var + self.epsilon), -self.cliprew, self.cliprew)
         #     rews_l = np.clip(rews_l / np.sqrt(self.ret_s_rms.var + self.epsilon), -self.cliprew, self.cliprew)
-        # if self.ret_l_rms: 
+        if self.ret_l_rms: 
             # self.ret_l_rms.update(self.ret_l)
-            # rews_l = np.clip(rews_l / np.sqrt(self.ret_l_rms.var + self.epsilon), -self.cliprew, self.cliprew)
+            rews_l = np.clip(rews_l / np.sqrt(self.ret_l_rms.var + self.epsilon), -self.cliprew, self.cliprew)
 
-        if self.count > 1000:
-            np.save('./ret_var', self.ret_l_rms.var)
-            self.count = 0
+        # if self.count > 1000:
+        #     np.save('./ob_mean', self.ob_rms.mean)
+        #     np.save('./ob_var', self.ob_rms.var)            
+        #     np.save('./ret_var', self.ret_l_rms.var)
+        #     self.count = 0
+
+        # self.count += 1
 
         return obs, rews_s, rews_l, news, infos
     def _obfilt(self, obs):
         if self.ob_rms: 
             ob_state = obs
             self.ob_rms.update(ob_state)
-            if self.count > 1000:
-                np.save('./ob_mean', self.ob_rms.mean)
-                np.save('./ob_var', self.ob_rms.var)
-
             ob_state = np.clip((ob_state - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + self.epsilon), -self.clipob, self.clipob)
             obs = ob_state
             return obs
@@ -102,11 +102,16 @@ class VecNormalize(object):
     def num_envs(self):
         # return self.venv.num_envs
         return 1
-
+    @property
+    def reward_step(self):
+        return self.venv.reward_step
     @property
     def reward_crash(self):
         return self.venv.reward_crash
-
+    @property
+    def reward_goal(self):
+        return self.venv.reward_goal
+        
 class RunningMeanStd(object):
     # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
     def __init__(self, epsilon=1e-4, shape=()):
