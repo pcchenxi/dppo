@@ -24,10 +24,10 @@ map_pixel = int(map_size/grid_size)
 observation_pixel = int(observation_range/grid_size)
 
 obstacle_num = 5
-observation_space = 16 + 3 + 3 + 3 #map_pixel*map_pixel + 25  # 60 x 60 + 8  2*3 + 2 + 2
+observation_space = 24 + 3 + 3 + 3 #map_pixel*map_pixel + 25  # 60 x 60 + 8  2*3 + 2 + 2
 # observation_space = obstacle_num*3 + 2 + 2
 
-action_space = 16 + 2 #len(action_list)
+action_space = 24 #len(action_list)
 action_type = spaces.Box(-1, 1, shape = (action_space,))
 # action_type = spaces.Discrete(action_space)
 
@@ -35,7 +35,7 @@ lua_script_name = 'world_visual'
 
 REWARD_GOAL = 5
 REWARD_STEP =  -0.03
-REWARD_CRASH = -0.5
+REWARD_CRASH = -3
 
 class Simu_env():
     def __init__(self, port_num):
@@ -68,7 +68,7 @@ class Simu_env():
         # return spaces.Discrete(len(action_list))
 
     def convert_state(self, robot_state, target_state, rot_vel):
-        state = np.asarray(robot_state[:16])
+        state = np.asarray(robot_state[:24])
         state = np.append(state, robot_state[-3:])
         state = np.append(state, rot_vel)
         # observation = self.terrain_map.flatten()
@@ -118,6 +118,14 @@ class Simu_env():
 
         return state
 
+    def check_state(self, action, found_pose):
+        _, _, robot_state, _, _ = self.call_sim_function(lua_script_name, 'get_robot_state')
+        _, _, target_state, _, _ = self.call_sim_function(lua_script_name, 'get_target_state') 
+        _, _, rot_vel, _, _ = self.call_sim_function('GyroSensor', 'get_rot_vel') 
+
+        reward_short, reward_long, is_finish, info = self.compute_reward(robot_state, target_state, action, found_pose)
+        return target_state, rot_vel, reward_short, reward_long, is_finish, info
+
     def step(self, action): 
         if isinstance(action, np.int32) or isinstance(action, int) or isinstance(action, np.int64):
             if action == -1:
@@ -126,12 +134,17 @@ class Simu_env():
                 action = action_list[action]
 
         _, _, robot_state, _, found_pose = self.call_sim_function(lua_script_name, 'step', action)
-        # time.sleep(0.2)
-        _, _, robot_state, _, _ = self.call_sim_function(lua_script_name, 'get_robot_state')
-        _, _, target_state, _, _ = self.call_sim_function(lua_script_name, 'get_target_state') 
-        _, _, rot_vel, _, _ = self.call_sim_function('GyroSensor', 'get_rot_vel') 
+        time.sleep(0.2)
+        action = np.zeros(len(action))
+        _, _, robot_state, _, found_pose = self.call_sim_function(lua_script_name, 'step', action)
+        time.sleep(5)
+        target_state, rot_vel, reward_short, reward_long, is_finish, info = self.check_state(action, found_pose)
 
-        reward_short, reward_long, is_finish, info = self.compute_reward(robot_state, target_state, action, found_pose)
+        if info == 'goal':
+            action = np.zeros(len(action))
+            _, _, robot_state, _, found_pose = self.call_sim_function(lua_script_name, 'step', action)
+            time.sleep(1)
+            target_state, rot_vel, reward_short, reward_long, is_finish, info = self.check_state(action, found_pose)
 
         state_ = self.convert_state(robot_state, target_state, rot_vel)
 
@@ -149,7 +162,6 @@ class Simu_env():
         diff_y = abs(g_pose[1]-target_state[4])
         dist = math.sqrt(diff_x*diff_x + diff_y*diff_y)
         target_reward = -(dist - self.dist_pre)
-        alive_reward = 0.02
 
         info = 'unfinish'
         is_finish = False
@@ -187,6 +199,13 @@ class Simu_env():
             target_reward = 0
             info = 'crash'
 
+        if found_pose == bytearray(b"b"):       # when collision or no pose can be found
+            # is_finish = True
+            # reward_short = -1
+            reward_long = REWARD_CRASH/10
+            alive_reward = 0
+            info = 'bad pose'
+
         # print('dist', dist, target_state)
         if dist < 0.2 and info != 'crash': # and diff_l < 0.02:
         # if robot_state[2] > 0.2 and info != 'crash':
@@ -201,7 +220,7 @@ class Simu_env():
             self.goal_cound = 0
 
 
-        if dist > 1: # 
+        if dist > 2: # 
         # if abs(g_pose[0]) > 0.1 or g_pose[1] < -0.1: # or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
         # if abs(robot_state[1]) > 0.15 or robot_state[2] < -0.6:
             is_finish = True
@@ -209,7 +228,7 @@ class Simu_env():
             reward_long = REWARD_CRASH
             info = 'out'
 
-        reward = (reward_long + 5*target_reward + alive_reward - sum_acc*0.05 + REWARD_STEP) * 0.5
+        reward = (reward_long + 10*target_reward - sum_acc*0.1 + REWARD_STEP) * 0.2
         return reward_short, reward, is_finish, info
 
     ####################################  interface funcytion  ###################################

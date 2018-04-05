@@ -24,6 +24,7 @@ _modifly_prob = 0
 function start()
     -- sleep (3)
     -- print('reset')
+    _floor_hd = simGetObjectHandle('floor')
     _base_hd = simGetObjectHandle('world_visual')
     _fake_robot_hd = simGetObjectHandle('fake_robot')
     _robot_hd = simGetObjectHandle('centauro')
@@ -58,7 +59,6 @@ function start()
         _start_ori[i] = simGetObjectOrientation(objects[i], _base_hd)    
     end
 
-
     _current_tra = {}
     _current_ep = {}
     _pre_ep = {}
@@ -78,7 +78,6 @@ function start()
     _pre_target_pos = _start_t_pos
     _pre_target_ori = _start_t_ori
     _pre_target_l = get_current_l(_robot_hd)
-    print(_pre_target_l)
 
     _center_x = 0
     _center_y = 0
@@ -123,7 +122,7 @@ function reset(inInts,inFloats,inStrings,inBuffer)
 
     target_pos = {}
     target_pos[1] = 0
-    target_pos[2] = math.random()
+    target_pos[2] = math.random()*1.8
     target_pos[3] = _start_t_pos[3]
     simSetObjectPosition(_target_hd, -1, target_pos)
 
@@ -133,12 +132,18 @@ function reset(inInts,inFloats,inStrings,inBuffer)
     robot_pos[3] = _start_pos[3]
     simSetObjectPosition(_base_hd, -1, robot_pos)
 
+    local init_wheel_angle = (math.random()-0.5)*2 * math.pi 
     reset_joint(_joint_hds)
+
     local objects=simGetObjectsInTree(_base_hd,sim_handle_all,0)
     for i=1,#objects,1 do
         simSetObjectPosition(objects[i], _base_hd, _start_xyz[i])
         simSetObjectOrientation(objects[i], _base_hd, _start_ori[i])        
         simResetDynamicObject(objects[i])
+    end
+    for i=17, 20, 1 do
+        simSetJointPosition(_joint_hds[i], init_wheel_angle)
+        simSetJointTargetPosition(_joint_hds[i], init_wheel_angle)
     end
 
     pos = simGetObjectPosition(_base_hd, -1)
@@ -184,42 +189,51 @@ end
 function step(inInts,actions,inStrings,inBuffer)
     if actions[#actions] > -10 then
         local robot_joints = get_joint_values(_joint_hds)
-        for i=1, 16, 1 do
+        for i=1, 20, 1 do
             if actions[i] >= -1 then 
                 local hd = _joint_hds[i]
-                simSetJointTargetVelocity(hd, 0.2*actions[i])
-                -- local joint_v = robot_joints[i] + math.pi*actions[i]*10/180
-                -- simSetJointTargetPosition(hd, joint_v)
-                --simSetJointForce(hd, 100)
+                if actions[i] == 0 then 
+                    simSetJointTargetVelocity(hd, 0)
+                    simSetJointTargetPosition(hd, robot_joints[i])
+                else
+                    simSetJointTargetVelocity(hd, 0.5*actions[i])
+                    simSetJointTargetPosition(hd, 1001)
+                end
             end
+        end
+        for i=21, 24, 1 do
+            local hd = _joint_hds[i]
+            if actions[i] == 0 then 
+                simSetJointTargetVelocity(hd, 0)
+                simSetJointTargetPosition(hd, robot_joints[i])
+            else
+                simSetJointTargetVelocity(hd, 0.5*actions[i])
+                simSetJointTargetPosition(hd, 1001)
+            end
+            --simSetJointForce(hd, 100)
         end 
-        -- for i=21, 24, 1 do
-        --     local hd = _joint_hds[i]
-        --     simSetJointTargetVelocity(hd, 0.5*actions[i])
-        --     --simSetJointForce(hd, 100)
-        -- end 
         -- -- move robot base
         
         -- rotate_robot(_joint_hds, actions[#actions-2])
-        move_robot(_joint_hds, actions[#actions-1], actions[#actions])
+        --move_robot(_joint_hds, actions[#actions-1], actions[#actions])
         -- _, v = simGetObjectFloatParameter(_joint_hds[17], 2012)
         -- print('velocity', v)
     end
     -- check collision
-    local res, data = simCheckDistance(_collection_robot_hd, _collection_hd, 0.05)
+    local _, data = simCheckDistance(_collection_robot_hd, _collection_hd, 0.05)
     if data ~= nil then 
         res = 'c'
     else
         res = 't'
     end
 
-    for i=1, #_joint_hds-4, 1 do
-        local joint_position = simGetObjectPosition(_joint_hds[i], -1)
-        if joint_position[3] < 0.15 then
-            res = 'a'
-            break
-        end
-    end
+    -- for i=1, #_joint_hds-4, 1 do
+    --     local joint_position = simGetObjectPosition(_joint_hds[i], -1)
+    --     if joint_position[3] < 0.15 then
+    --         res = 'a'
+    --         break
+    --     end
+    -- end
 
     for i=#_joint_hds-3, #_joint_hds, 1 do
         local joint_position = simGetObjectPosition(_joint_hds[i], -1)
@@ -228,6 +242,12 @@ function step(inInts,actions,inStrings,inBuffer)
             break
         end
     end
+    
+    local result, data = simCheckDistance(_collection_robot_hd, _floor_hd, 0.1)
+    -- print(data[1], data[2], data[3], data[4], data[5], data[6], data[7])
+    if data ~= nil then 
+        res = 'a'
+    end 
 
     _, joint_pose, _, _ = get_robot_state()
     return {}, joint_pose, {}, res
