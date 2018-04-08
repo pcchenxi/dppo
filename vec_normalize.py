@@ -12,11 +12,9 @@ class VecNormalize(object):
         self._action_space = venv.action_space
         self.ob_rms = RunningMeanStd(shape=self._observation_space.shape) if ob else None
         # self.ob_rms = RunningMeanStd(shape=4) if ob else None
-        self.ret_s_rms = RunningMeanStd(shape=()) if ret else None
         self.ret_l_rms = RunningMeanStd(shape=()) if ret else None
         self.clipob = clipob
         self.cliprew = cliprew
-        self.ret_s = np.zeros(self.num_envs)
         self.ret_l = np.zeros(self.num_envs)
         self.gamma = gamma
         self.epsilon = epsilon
@@ -34,14 +32,9 @@ class VecNormalize(object):
 
         where 'news' is a boolean vector indicating whether each element is new.
         """
-        obs, rews_s, rews_l, news, infos = self.venv.step(vac)
-        self.ret_s = self.ret_s * self.gamma*0.7 + rews_s
+        obs, rews_l, news, infos = self.venv.step(vac)
         self.ret_l = self.ret_l * self.gamma + rews_l
         obs = self._obfilt(obs)
-        # if self.ret_s_rms: 
-        #     self.ret_s_rms.update((self.ret_s + self.ret_l)/2)
-        #     rews_s = np.clip(rews_s / np.sqrt(self.ret_s_rms.var + self.epsilon), -self.cliprew, self.cliprew)
-        #     rews_l = np.clip(rews_l / np.sqrt(self.ret_s_rms.var + self.epsilon), -self.cliprew, self.cliprew)
         if self.ret_l_rms: 
             self.ret_l_rms.update(self.ret_l)
             # rews_l = np.clip(rews_l / np.sqrt(self.ret_l_rms.var + self.epsilon), -self.cliprew, self.cliprew)
@@ -54,7 +47,7 @@ class VecNormalize(object):
 
         self.count += 1
 
-        return obs, rews_s, rews_l, news, infos
+        return obs, rews_l, news, infos
     def _obfilt(self, obs):
         if self.ob_rms: 
             ob_state = obs

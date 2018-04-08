@@ -124,8 +124,8 @@ class Simu_env():
         _, _, target_state, _, _ = self.call_sim_function(lua_script_name, 'get_target_state') 
         _, _, rot_vel, _, _ = self.call_sim_function('GyroSensor', 'get_rot_vel') 
 
-        reward_short, reward_long, is_finish, info = self.compute_reward(robot_state, target_state, action, found_pose)
-        return target_state, rot_vel, reward_short, reward_long, is_finish, info
+        reward_long, is_finish, info = self.compute_reward(robot_state, target_state, action, found_pose)
+        return target_state, rot_vel, reward_long, is_finish, info
 
     def step(self, action): 
         if isinstance(action, np.int32) or isinstance(action, int) or isinstance(action, np.int64):
@@ -135,19 +135,20 @@ class Simu_env():
                 action = action_list[action]
 
         _, _, robot_state, _, found_pose = self.call_sim_function(lua_script_name, 'step', action)
-        target_state, rot_vel, reward_short, reward_long, is_finish, info = self.check_state(action, found_pose)
+        target_state, rot_vel, reward_long, is_finish, info = self.check_state(action, found_pose)
         # time.sleep(0.2)
 
         if info == 'goal':
             action = np.zeros(len(action))
             _, _, robot_state, _, found_pose = self.call_sim_function(lua_script_name, 'step', action)
             time.sleep(1)
-            target_state, rot_vel, reward_short, reward_long, is_finish, info = self.check_state(action, found_pose)
-            reward_long += REWARD_GOAL
+            target_state, rot_vel, reward_long, is_finish, info = self.check_state(action, found_pose)
+            if info == 'goal':
+                reward_long += REWARD_GOAL
 
         state_ = self.convert_state(robot_state, target_state, rot_vel)
 
-        return state_, reward_short, reward_long, is_finish, info
+        return state_, reward_long, is_finish, info
 
     def compute_reward(self, robot_state, target_state, action, found_pose):
         # state_diff = np.sum(abs(robot_state[24] - self.state_pre[24]))/math.pi
@@ -169,7 +170,6 @@ class Simu_env():
         # action_diff = abs(action - self.action_pre)
         action_cost = -np.sum(action * action)
 
-        reward_short = 0 #REWARD_GOAL/2 #REWARD_CRASH/(self.max_length*2)
         reward_long = 0
 
         # save robot global pose
@@ -184,14 +184,12 @@ class Simu_env():
 
         if found_pose == bytearray(b"b"):       # when collision or no pose can be found
             # is_finish = True
-            # reward_short = -1
             reward_long = REWARD_CRASH/10
             alive_reward = 0
             info = 'bad pose'
             
         if found_pose == bytearray(b"a"):       # when collision or no pose can be found
             is_finish = True
-            # reward_short = -1
             reward_long = REWARD_CRASH   
             target_reward = 0 
             alive_reward = 0
@@ -199,14 +197,13 @@ class Simu_env():
 
         if found_pose == bytearray(b"c"):       # when collision or no pose can be found
             is_finish = True
-            # reward_short = -1
             reward_long = REWARD_CRASH
             alive_reward = 0
             target_reward = 0
             info = 'crash'
 
         # print('dist', dist, target_state)
-        if dist < 0.1 and g_pose[-1] < 0.1 and info != 'crash': # and diff_l < 0.02:
+        if dist < 0.15 and g_pose[-1] < 0.15 and info != 'crash': # and diff_l < 0.02:
         # if robot_state[2] > 0.2 and info != 'crash':
             is_finish = True
             info = 'goal'
@@ -224,12 +221,11 @@ class Simu_env():
         # if abs(g_pose[0]) > 0.1 or g_pose[1] < -0.1: # or (robot_state[2] < 0 and abs(robot_state[1]) > 0.1): # out of boundary
         # if abs(robot_state[1]) > 0.15 or robot_state[2] < -0.6:
             is_finish = True
-            reward_short = -1
             reward_long = REWARD_CRASH
             info = 'out'
 
         reward = (reward_long + 10*target_reward + REWARD_STEP - sum_acc*0)
-        return reward_short, reward, is_finish, info
+        return reward, is_finish, info
 
     ####################################  interface funcytion  ###################################
     def save_ep(self):

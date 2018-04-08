@@ -21,8 +21,8 @@ GAMMA = 0.98                # reward discount factor
 LAM = 0.95
 LR = 0.0001
 
-BATCH_SIZE = 3000
-MIN_BATCH_SIZE = 512 #int(BATCH_SIZE/5)-1       # minimum batch size for updating PPO
+BATCH_SIZE = 5000
+MIN_BATCH_SIZE = 1000 #int(BATCH_SIZE/5)-1       # minimum batch size for updating PPO
 
 UPDATE_STEP = 10            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
@@ -57,21 +57,21 @@ class PPO(object):
         self.sess = tf.Session()
         self.tfs = tf.placeholder(tf.float32, [None, S_DIM], 'state')
 
-        self.tfdc_rs = tf.placeholder(tf.float32, [None], 'discounted_rs')
-        self.tfdc_rl = tf.placeholder(tf.float32, [None], 'discounted_rl')
+        self.tfdc_r1 = tf.placeholder(tf.float32, [None], 'discounted_r1')
+        self.tfdc_r2 = tf.placeholder(tf.float32, [None], 'discounted_r2')
 
         if isinstance(Action_Space, gym.spaces.Box):
             self.tfa = tf.placeholder(tf.float32, [None, A_DIM], 'action')
         else:
             self.tfa = tf.placeholder(tf.int32, [None], 'action')
-        self.tfadv = tf.placeholder(tf.float32, [None], 'advantage')
 
+        self.tfadv = tf.placeholder(tf.float32, [None], 'advantage')
         self.tf_is_train = tf.placeholder(tf.bool, None)
 
         print('init place holder')
         # actor
-        pd, self.vs, self.vl, net_params = self._build_anet('net', self.tfs, trainable=True)
-        oldpd, oldvs, oldvl, oldnet_params = self._build_anet('oldnet', self.tfs, trainable=False)
+        pd, self.v1, self.v2, net_params = self._build_anet('net', self.tfs, trainable=True)
+        oldpd, oldv1, oldv2, oldnet_params = self._build_anet('oldnet', self.tfs, trainable=False)
         print('inti net')
 
         self.sample_op = pd.sample() #tf.squeeze(pi.sample(1), axis=0)  # operation of choosing action
@@ -83,17 +83,21 @@ class PPO(object):
         OLDNEGLOGPAC = oldpd.neglogp(self.tfa)
         self.entropy = tf.reduce_mean(pd.entropy())
 
-        vpredclipped = oldvl + tf.clip_by_value(self.vl - oldvl, - EPSILON, EPSILON)
-        vf_losses1 = tf.square(self.vl - self.tfdc_rl)
-        vf_losses2 = tf.square(vpredclipped - self.tfdc_rl)
-        vf_loss = 0.5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
+        vf_loss1 = tf.square(self.v1 - self.tfdc_r1)
+
+        vpredclipped2 = oldv2 + tf.clip_by_value(self.v2 - oldv2, - EPSILON, EPSILON)
+        vf_losses12 = tf.square(self.v2 - self.tfdc_r2)
+        vf_losses22 = tf.square(vpredclipped2 - self.tfdc_r2)
+        vf_loss2 = 0.5 * tf.reduce_mean(tf.maximum(vf_losses12, vf_losses22))
+
         ratio = tf.exp(OLDNEGLOGPAC - neglogpac)
         pg_losses = -self.tfadv * ratio
         pg_losses2 = -self.tfadv * tf.clip_by_value(ratio, 1.0 - EPSILON, 1.0 + EPSILON)
         pg_loss = tf.reduce_mean(tf.maximum(pg_losses, pg_losses2))
         approxkl = .5 * tf.reduce_mean(tf.square(neglogpac - OLDNEGLOGPAC))
         clipfrac = tf.reduce_mean(tf.to_float(tf.greater(tf.abs(ratio - 1.0), EPSILON)))
-        loss = pg_loss - self.entropy * 0.001 + vf_loss
+
+        loss = pg_loss - self.entropy * 0.001 + vf_loss2
 
         params = tf.trainable_variables(scope='net')
         # print(params)
@@ -102,10 +106,11 @@ class PPO(object):
         max_grad_norm = 1
         if max_grad_norm is not None:
             grads_clipped, _grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
-        grads_and_params = list(zip(grads_clipped, params))
+        grads_and_params = list(zip(grads, params))
         trainer = tf.train.AdamOptimizer(learning_rate=LR, epsilon=1e-5)
         self.train_op = trainer.apply_gradients(grads_and_params)
 
+        self.train_op1 = tf.train.AdamOptimizer(0.001).minimize(vf_loss1)
         self.sess.run(tf.global_variables_initializer())
 
         self.saver = tf.train.Saver()
@@ -113,7 +118,8 @@ class PPO(object):
 
         # self.pi_prob = tf.nn.softmax(pd.logits)
         self.aloss = pg_loss 
-        self.closs = tf.reduce_mean(vf_losses1) 
+        self.closs = tf.reduce_mean(vf_loss2)
+        self.closs1 = vf_loss1
         self.total_loss = loss
         self.ratio = ratio
         self.grad_norm = _grad_norm
@@ -137,18 +143,18 @@ class PPO(object):
         self.summary_writer.flush()  
         # print(value, GLOBAL_EP, 'summary')
 
-    def shuffel_data(self, s, a, rs, rl, adv):
-        index_shuffeled = np.random.choice(len(rs), len(rs), replace=False)
-        s_shuf, a_shuf, rs_shuf, rl_shuf, adv_shuf = [], [], [], [], []
+    def shuffel_data(self, s, a, r1, r2, adv):
+        index_shuffeled = np.random.choice(len(r1), len(r1), replace=False)
+        s_shuf, a_shuf, r1_shuf, r2_shuf, adv_shuf = [], [], [], [], []
 
         for i in index_shuffeled:
             s_shuf.append(s[i])
             a_shuf.append(a[i])
-            rs_shuf.append(rs[i])
-            rl_shuf.append(rl[i])
+            r1_shuf.append(r1[i])
+            r2_shuf.append(r2[i])
             adv_shuf.append(adv[i])
 
-        return s_shuf, a_shuf, rs_shuf, rl_shuf, adv_shuf
+        return s_shuf, a_shuf, r1_shuf, r2_shuf, adv_shuf
 
     def _build_feature_net(self, name, input_state, trainable):
         w_init = tf.contrib.layers.xavier_initializer()
@@ -189,12 +195,12 @@ class PPO(object):
             h2 = tf.layers.dense(h1, 256, tf.nn.relu, kernel_initializer=w_init, name = 'fc2', trainable=trainable)
             h3 = tf.layers.dense(h2, 256, tf.nn.relu, kernel_initializer=w_init, name = 'fc3', trainable=trainable)
 
-            with tf.variable_scope('actor_critic'):
-                h4 = tf.layers.dense(h3, 128, tf.nn.relu, kernel_initializer=w_init, name = 'fc4', trainable=trainable)
+            state_t = tf.slice(input_state, [0, S_DIM-3], [-1, 3], name = 'slice_ob') 
 
+            with tf.variable_scope('actor_critic'):
                 if isinstance(Action_Space, gym.spaces.Box):
                     print('continue action',A_DIM, S_DIM)
-                    pi = tf.layers.dense(h4, A_DIM, kernel_initializer=w_init, name = 'fc_pi', trainable=trainable)
+                    pi = tf.layers.dense(h3, A_DIM, kernel_initializer=w_init, name = 'fc_pi', trainable=trainable)
                     logstd = tf.get_variable(name="logstd", shape=[1, A_DIM], initializer=tf.zeros_initializer())
                     pdparam = tf.concat([pi, pi * 0.0 + logstd], axis=1)
                     pdtype = make_pdtype(Action_Space)
@@ -205,11 +211,14 @@ class PPO(object):
                     pdtype = make_pdtype(Action_Space)
                     pd = pdtype.pdfromflat(pi)   
 
-                vl = tf.layers.dense(h4, A_DIM, name = 'fc_v', trainable=trainable)[:,0]
-                vs = vl #fc(h4, 'v', 1, act=lambda x:x)[:,0]
+                v1_h1 = tf.layers.dense(state_t, 64, tf.nn.relu, kernel_initializer=w_init, name = 'v1_h1', trainable=trainable)
+                v1_h2 = tf.layers.dense(v1_h1, 64, tf.nn.relu, kernel_initializer=w_init, name = 'v1_h2', trainable=trainable)
+                v1 = tf.layers.dense(v1_h2, 1, kernel_initializer=w_init, name = 'v1', trainable=trainable)
+
+                v2 = tf.layers.dense(h3, 1, kernel_initializer=w_init, name = 'fc_v', trainable=trainable)
 
         params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=name)
-        return pd, vs, vl, params
+        return pd, v1, v2, params
 
 
     def choose_action(self, s, det=False):
@@ -238,27 +247,28 @@ class PPO(object):
     def get_v(self, s):
         s_ndim = s.ndim
         if s.ndim < 2: s = s[np.newaxis, :]
-        vs, vl = self.sess.run([self.vs, self.vl], {self.tfs: s, self.tf_is_train: False})
+        v1, v2 = self.sess.run([self.v1, self.v2], {self.tfs: s, self.tf_is_train: False})
 
         if s_ndim < 2:
-            return vs[0], vl[0]
+            return v1[0][0], v2[0][0]
         else:
-            return vs, vl
+            return v1, v2
 
-    def check_overall_loss(self, s, a, rs, rl, adv):
+    def check_overall_loss(self, s, a, r1, r2, adv1, adv2):
         feed_dict = {
             self.tfs: s, 
             self.tfa: a, 
-            self.tfdc_rs: rs, 
-            self.tfdc_rl: rl, 
-            self.tfadv: adv, 
+            self.tfdc_r1: r1, 
+            self.tfdc_r2: r2, 
+            self.tfadv_1: adv1, 
+            self.tfadv_2: adv2, 
             self.tf_is_train: False
         }
 
         tloss, aloss, vloss, entropy, grad_norm = self.sess.run([self.total_loss, self.aloss, self.closs, self.entropy, self.grad_norm], feed_dict = feed_dict)
         return tloss, aloss, vloss, entropy, grad_norm
 
-    def load_guid_tra(self, s, a, rs, rl, adv_s, adv_l, info):
+    def load_guid_tra(self, s, a, rl, adv_l, info):
         g_s, g_a, g_rl, g_info = [], [], [], []
 
         size = 2560 #int(len(a)/4) #int(BATCH_SIZE*0.3)
@@ -364,18 +374,15 @@ class PPO(object):
 
         s = np.concatenate((s, g_s), axis = 0)
         a = np.concatenate((a, g_a), axis = 0)
-        rs = np.concatenate((rs, g_rl), axis = 0)
         rl = np.concatenate((rl, g_rl), axis = 0)
-        adv_s = np.concatenate((adv_s, g_adv), axis = 0)
         adv_l = np.concatenate((adv_l, g_adv), axis = 0)
         info = np.concatenate((info, g_info), axis = 0)
 
-        return s, a, rs, rl, adv_s, adv_l, info
+        return s, a, rl, adv_l, info
 
     def update(self):
         global GLOBAL_UPDATE_COUNTER, G_ITERATION, GLOBAL_EP
         update_count = 1
-        s_all, a_all, rs_all, rl_all, adv_s_all, adv_l_all = [], [], [], [], [], []
 
         while not COORD.should_stop():
             UPDATE_EVENT.wait()                     # wait until get batch of data
@@ -384,50 +391,46 @@ class PPO(object):
             data = [QUEUE.get() for _ in range(QUEUE.qsize())]      # collect data from all workers
             data = np.vstack(data)
             # s, a, r, adv = data[:, :S_DIM], data[:, S_DIM: S_DIM + A_DIM], data[:, S_DIM + A_DIM: S_DIM + A_DIM + 1], data[:, -1:]
+            shift = S_DIM + A_DIM
             if isinstance(Action_Space, gym.spaces.Box):
-                s, a, rs, rl, adv_s, adv_l, info = data[:, :S_DIM], data[:, S_DIM: S_DIM + A_DIM], data[:, S_DIM + A_DIM: S_DIM + A_DIM+1], data[:, S_DIM + A_DIM+1: S_DIM + A_DIM+2], data[:, S_DIM + A_DIM+2: S_DIM + A_DIM+3], data[:, S_DIM + A_DIM+3: S_DIM + A_DIM+4], data[:, -1:]
+                s, a, r1, r2, adv_l, rew, info = data[:, :S_DIM], data[:, S_DIM: shift], data[:, shift: shift+1], data[:, shift+1: shift+2], data[:, shift+2: shift+3], data[:, shift+3: shift+4], data[:, shift+4: shift+5]
             else:
-                s, a, rs, rl, adv_s, adv_l, info = data[:, :S_DIM], data[:, S_DIM: S_DIM + 1], data[:, S_DIM + 1: S_DIM + 2], data[:, S_DIM + 2: S_DIM + 3], data[:, S_DIM + 3: S_DIM + 4], data[:, S_DIM + 4: S_DIM + 5], data[:, -1:]
+                s, a, r1, r2, adv_l, rew, info = data[:, :S_DIM], data[:, S_DIM: S_DIM + 1], data[:, S_DIM + 1: S_DIM + 2], data[:, S_DIM + 2: S_DIM + 3], data[:, S_DIM + 3: S_DIM + 4], data[:, S_DIM + 4: S_DIM + 5], data[:, S_DIM + 5: S_DIM + 6]
                 a = (a.flatten())
             
-            rs = (rs.flatten())
-            rl = (rl.flatten())
-            adv_s = (adv_s.flatten())
+            r1 = (r1.flatten())
+            r2 = (r2.flatten())
             adv_l = (adv_l.flatten())
             info = info.flatten()
-            ret_mean = rl.mean()
-            r_mean = adv_s.mean()
-            # s, a, rs, rl, adv_s, adv_l, info = self.load_guid_tra(s, a, rs, rl, adv_s, adv_l, info)
+            rew = rew.flatten()
+            ret_mean = r1.mean()
+            rew_mean = rew.mean()
+            # s, a, rl, adv_l, info = self.load_guid_tra(s, a, rl, adv_l, info)
 
-            adv = adv_l*1
-
-            # adv_s_scale = adv_s * abs(adv.min())
-            # for i in range(len(adv)):
-            #     if adv_s[i] < -0.9:
-            #         adv[i] = (adv_s_scale[i] + adv[i])/2
+            adv = adv_l
 
             if adv.std() != 0:
                 adv = (adv - adv.mean())/adv.std()
 
-            print(G_ITERATION, '  --------------- update! batch size:', GLOBAL_EP, '-----------------', len(rs))
+            print(G_ITERATION, '  --------------- update! batch size:', GLOBAL_EP, '-----------------', len(r1))
 
             for iteration in range(UPDATE_STEP):
                 # construct reward predict data                
-                s_, a_, rs_, rl_, adv_ = self.shuffel_data(s, a, rs, rl, adv)   
-                # s_, a_, rs_, rl_, adv_ = s, a, rs, rl, adv
+                # s_, a_, r1_, r2_, adv_ = self.shuffel_data(s, a, r1, r2, adv)   
+                s_, a_, r1_, r2_, adv_ = s, a, r1, r2, adv
                 count = 0
-                for start in range(0, len(rs), MIN_BATCH_SIZE):
+                for start in range(0, len(r1), MIN_BATCH_SIZE):
                     end = start + MIN_BATCH_SIZE -1
-                    if end >= len(rs) and count != 0:
+                    if end >= len(r1) and count != 0:
                         break
-                    if  end >= len(rs) and count == 0:
-                        end = len(rs)-1
+                    if  end >= len(r1) and count == 0:
+                        end = len(r1)-1
                     count += 1
 
                     sub_s = s_[start:end]
                     sub_a = a_[start:end]
-                    sub_rs = rs_[start:end]
-                    sub_rl = rl_[start:end]
+                    sub_r1 = r1_[start:end]
+                    sub_r2 = r2_[start:end]
                     sub_adv = np.asarray(adv_[start:end])
                     sub_info = info[start:end]
                     # sub_s, sub_a, sub_rs, sub_rl, sub_adv, sub_adv, sub_info = self.load_guid_tra(sub_s, sub_a, sub_rs, sub_rl, sub_adv, sub_adv, sub_info)
@@ -435,40 +438,37 @@ class PPO(object):
                     # sub_s, sub_a, sub_rs, sub_rl, sub_adv = self.get_minibatch(s, a, rs, rl, adv, possitive_index, negative_index)
                     # print(sub_adv)
                     feed_dict = {
-                        self.tfs: sub_s, 
-                        self.tfa: sub_a, 
-                        self.tfdc_rs: sub_rs,
-                        self.tfdc_rl: sub_rl, 
-                        self.tfadv: sub_adv, 
-                        self.tf_is_train: True
+                        self.tfs: s, 
+                        self.tfa: a, 
+                        self.tfdc_r1: r1, 
+                        self.tfdc_r2: r2, 
+                        self.tfadv: adv, 
+                        self.tf_is_train: False
                     }
-                    self.sess.run(self.train_op, feed_dict = feed_dict)
+                    self.sess.run([self.train_op, self.train_op1], feed_dict = feed_dict)
                     # self.sess.run([self.atrain_op, self.ctrain_op], feed_dict = feed_dict)
 
                 # tloss, aloss, vloss, entropy, grad_norm = self.check_overall_loss(s, a, rs, rl, adv)
                 # print("aloss: %7.4f|, vloss: %7.4f| entropy: %7.4f" % (aloss, vloss, entropy), grad_norm)
                 print(iteration)
 
-            # feed_dict = {
-            #     self.tfs: s, 
-            #     self.tfa: a, 
-            #     self.tfdc_rs: rs, 
-            #     self.tfdc_rl: rl, 
-            #     self.tfadv: adv, 
-            #     self.tf_is_train: True
-            # }
+            feed_dict = {
+                self.tfs: s, 
+                self.tfa: a, 
+                self.tfdc_r1: r1, 
+                self.tfdc_r2: r2, 
+                self.tfadv: adv, 
+                self.tf_is_train: False
+            }
             # onehota_prob, oldhota_prob, ratio = self.sess.run([self.a_prob, self.olda_prob, self.ratio], feed_dict = feed_dict)
             # for i in range(len(r)):
             #     print(onehota_prob[i], oldhota_prob[i], ratio[i])
 
-            # ratio, vs, vl = self.sess.run([self.ratio, self.vs, self.vl], feed_dict = feed_dict)
+            ratio, v1, v2 = self.sess.run([self.ratio, self.v1, self.v2], feed_dict = feed_dict)
             # ratio = ratio.flatten()
-            # for i in range(len(rs)): #range(25):
-            #     print("%8.4f, %8.4f|, %8.4f, %8.4f|, %8.4f, %8.4f, %8.4f|, %8.4f|"%(rs[i], rl[i], vs[i], vl[i], adv_s[i], adv_l[i], adv[i], ratio[i]), info[i])
-            #     # print(a[i])
-            #     # print("%8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %8.4f, %6.0i, %8.4f"%(reward[i], r[i], vpred[i], vpred_new[i], adv[i], ratio[i], a[i], a_prob[i][act]), a_prob[i])
-
-            print(rs.mean(), rl.mean())
+            for i in range(len(r1)): #range(25):
+                print("rew %8.4f, r1 %8.4f, r2 %8.4f|, v1 %8.4f  v2 %8.4f|, adv %8.4f|, ratio %8.4f|"%(rew[i], r1[i], r2[i], v1[i], v2[i], adv[i], ratio[i]), info[i])
+                # print(a[i])
 
             tloss, aloss, vloss, entropy, grad_norm = self.sess.run([self.total_loss, self.aloss, self.closs, self.entropy, self.grad_norm], feed_dict = feed_dict)
             print('-------------------------------------------------------------------------------')
@@ -479,7 +479,7 @@ class PPO(object):
             self.write_summary('Loss/v loss', vloss) 
             self.write_summary('Loss/grad norm', grad_norm) 
             self.write_summary('Perf/mean_ret', ret_mean)  
-            self.write_summary('Perf/mean_rew', r_mean)  
+            self.write_summary('Perf/mean_rew', rew_mean)  
 
             model_index = int(G_ITERATION / 10)
             self.saver.save(self.sess, './model/rl/model_' + str(model_index) + '.cptk') 
@@ -566,8 +566,8 @@ class Worker(object):
 
         return s_new, success
 
-    def get_aurgm_batch(self, iteration, s, a, ret_s, ret_l, info):
-        aurg_s, aurg_a, aurg_ret_s, aurg_ret_l, aurg_adv_s, aurg_adv_l, aurg_info = [], [], [], [], [], [], []
+    def get_aurgm_batch(self, iteration, s, a, ret_l, info):
+        aurg_s, aurg_a, aurg_ret_l, aurg_adv_l, aurg_info = [], [], [], [], []
 
         for i in range(len(s)-2):
             pose_mask = self.get_pose_mask(self.env.robot_pose_list[i:])
@@ -576,77 +576,50 @@ class Worker(object):
                 if success:
                     aurg_s.append(s_modf)
                     aurg_a.append(a[i])
-                    aurg_ret_s.append(ret_s[i])
                     aurg_ret_l.append(ret_l[i])
                     aurg_info.append(info[i])
 
         if aurg_s != []:
             aurg_vpred_s, aurg_vpred_l = self.ppo.get_v(np.asarray(aurg_s))
-            aurg_adv_s = aurg_ret_s - aurg_vpred_s
             aurg_adv_l = aurg_ret_l - aurg_vpred_l
 
-        # print(len(aurg_s[0]), len(aurg_a), len(aurg_ret_l), len(aurg_ret_s), len(aurg_adv_l), len(aurg_adv_s), len(aurg_info))
-        return aurg_s, aurg_a, aurg_ret_s, aurg_ret_l, aurg_adv_s, aurg_adv_l, aurg_info
+        # print(len(aurg_s[0]), len(aurg_a), len(aurg_ret_l), len(aurg_adv_l), len(aurg_adv_s), len(aurg_info))
+        return aurg_s, aurg_a, aurg_ret_l, aurg_adv_l, aurg_info
 
-    def compute_adv_return(self, buffer_reward, buffer_vpred, buffer_info, mode='long'):
-        lastgaelam = 0.0
-        buffer_return = np.zeros(len(buffer_reward))
-        buffer_adv = np.zeros(len(buffer_reward))
-
-        # print(len(buffer_reward))
-        if mode == 'long':
-            gamma = GAMMA
+    def compute_adv_return(self, buffer_reward, buffer_vpred, buffer_info):
+        if buffer_info[-1] == 'goal':
+            nonterminal = 0
         else:
-            gamma = GAMMA*0.7
-            
-        for index in reversed(range(len(buffer_reward))):
-            # if buffer_info[index] == 'crash' or buffer_info[index] == 'goal':
-            if mode == 'long':
-                # if buffer_info[index] != 'unfinish':
-                if buffer_info[index] == 'goal':
-                    nonterminal = 0
-                else:
-                    nonterminal = 1
-            if mode != 'long':
-                if buffer_info[index] == 'crash' or buffer_info[index] == 'crash_a' or buffer_info[index] == 'out':
-                    nonterminal = 0
-                else:
-                    nonterminal = 1                
-            delta = buffer_reward[index] + gamma * buffer_vpred[index+1] * nonterminal - buffer_vpred[index]
-            lastgaelam = delta + gamma * LAM * nonterminal * lastgaelam
-            buffer_adv[index] = lastgaelam
+            nonterminal = 1              
 
-        #     delta = buffer_reward[index] + gamma * buffer_vpred[index+1] * nonterminal
-        #     lastgaelam = delta + gamma * nonterminal * lastgaelam
-        #     buffer_return[index] = lastgaelam
-        # buffer_adv = buffer_return - buffer_vpred[:-1]
+        v_s_ = buffer_vpred[-1]*nonterminal
+        buffer_return = []                           # compute discounted reward
+        for r in buffer_reward[::-1]:
+            v_s_ = r + GAMMA * v_s_
+            buffer_return.append(v_s_)
+        buffer_return.reverse()
 
-        buffer_return = buffer_adv + buffer_vpred[:-1]
+        buffer_adv = buffer_return - buffer_vpred[:-1]
+
         # for index in range(len(buffer_reward)):
         #     print(buffer_reward[index], buffer_return[index], buffer_vpred[index], buffer_adv[index])
 
         # print('-----------------')
         return buffer_adv, buffer_return
 
-    def process_and_send(self, buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_info, s_):
-        buffer_vpred_s, buffer_vpred_l = self.ppo.sess.run([self.ppo.vs, self.ppo.vl], feed_dict = {self.ppo.tfs: buffer_s, self.ppo.tf_is_train: False})
-        buffer_vpred_s = buffer_vpred_s.flatten()
-        buffer_vpred_l = buffer_vpred_l.flatten()
+    def process_and_send(self, buffer_s, buffer_a, buffer_r, buffer_info, s_):
+        buffer_vpred_1, buffer_vpred_2 = self.ppo.sess.run([self.ppo.v1, self.ppo.v2], feed_dict = {self.ppo.tfs: buffer_s, self.ppo.tf_is_train: False})
+        buffer_vpred_1, buffer_vpred_2 = buffer_vpred_1.flatten(), buffer_vpred_2.flatten()
         
-        vpred_s_, vpred_l_ = self.ppo.get_v(s_)
-        vpred_s_ = 0
-        # vpred_l_ = 0
-        buffer_vpred_s = np.append(buffer_vpred_s, vpred_s_)
-        buffer_vpred_l = np.append(buffer_vpred_l, vpred_l_)
-        buffer_adv_s, buffer_return_s = self.compute_adv_return(buffer_rs, buffer_vpred_s, buffer_info, 'short')
-        buffer_adv_l, buffer_return_l = self.compute_adv_return(buffer_rl, buffer_vpred_l, buffer_info, 'long')
-
-        buffer_adv_s = buffer_return_s*1
+        vpred_1_, vpred_2_ = self.ppo.get_v(s_)
+        buffer_vpred_1, buffer_vpred_2 = np.append(buffer_vpred_1, vpred_1_), np.append(buffer_vpred_2, vpred_2_)
+        buffer_adv, buffer_return = self.compute_adv_return(buffer_r, buffer_vpred_2, buffer_info)
+        buffer_adv_1, buffer_return_1 = self.compute_adv_return(buffer_r, buffer_vpred_1, buffer_info)
 
         if self.wid == 0:
             print('----')
             for i in range(len(buffer_a)):
-                print("rs: %7.4f| rl: %7.4f| vs: %7.4f| vl: %7.4f| adv_s: %7.4f| adv_l: %7.4f| r_s: %7.4f| r_l: %7.4f" %(buffer_rs[i], buffer_rl[i], buffer_vpred_s[i], buffer_vpred_l[i], buffer_adv_s[i], buffer_adv_l[i], buffer_return_s[i], buffer_return_l[i]), buffer_info[i])
+                print("rl: %7.4f| v1: %7.4f| v2: %7.4f| adv_1: %7.4f| adv_2: %7.4f| ret_1: %7.4f, ret_2: %7.4f" %(buffer_r[i], buffer_vpred_1[i], buffer_vpred_2[i], buffer_adv_1[i], buffer_adv[i], buffer_return_1[i], buffer_return[i]), buffer_info[i])
             
         info_num = []
         for info in buffer_info:
@@ -661,7 +634,7 @@ class Worker(object):
         
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        return buffer_return_s, buffer_return_l, buffer_rl, buffer_adv_l, info_num
+        return buffer_return_1, buffer_return, buffer_adv_1, buffer_adv, info_num
 
     def evaluate_model(self, ep_num):
         goal_num = 0
@@ -814,7 +787,7 @@ class Worker(object):
             time.sleep(1)
 
         while not COORD.should_stop():
-            buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
+            buffer_s, buffer_a, buffer_rl, buffer_info = [], [], [], []
             info = 'unfinish'
 
             t = 0
@@ -829,24 +802,26 @@ class Worker(object):
             while(1):
                 if not ROLLING_EVENT.is_set():                  # while global PPO is updating
                     ROLLING_EVENT.wait()                        # wait until PPO is updated
-                    buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
+                    buffer_s, buffer_a, buffer_rl, buffer_info = [], [], [], []
                     # if update_counter%1 == 0:
                         # self.env.clear_history()
                     # self.test_model(5)
                     update_counter += 1
                     break
 
-                if t%3 == 0:
-                    a = self.ppo.choose_action(s, False)
-                for i in range(len(a)-4):
-                    a[i] = 0
+                # if t%3 == 0:
+                a = self.ppo.choose_action(s, False)
+                # for i in range(len(a)-4):
+                #     a[i] = 0
                 
-                s_, r_short, r_long, done, info = self.env.step(a)
+                # state_v = self.ppo.sess.run(self.ppo.state_v, {self.ppo.tfs: s[np.newaxis, :]})
+
+                s_, r_long, done, info = self.env.step(a)
                 # if self.wid == 0:
                 #     print(a[-2:])
                 # print('action generated:', a)
                 # self.ppo.get_action_prob(s)
-                vpred_s, vpred_l = self.ppo.get_v(s)
+                vpred_1, vpred_2 = self.ppo.get_v(s)
 
                 GLOBAL_STEP += 1
 
@@ -857,10 +832,7 @@ class Worker(object):
 
                 buffer_s.append(s*1)
                 buffer_a.append(a)
-                buffer_rs.append(r_short)                    # normalize reward, find to be useful
                 buffer_rl.append(r_long)
-                buffer_vpred_s.append(vpred_s)
-                buffer_vpred_l.append(vpred_l)
                 buffer_info.append(info)
                 s_demo = s_*1
                 GLOBAL_UPDATE_COUNTER += 1               # count to minimum batch size, no need to wait other workers
@@ -876,19 +848,20 @@ class Worker(object):
                     for i in range(len(buffer_rl)):
                         buffer_rl[i] = buffer_rl[i] * 0.5
 
-                    buffer_return_s, buffer_return_l, buffer_adv_s, buffer_adv_l, info_num = self.process_and_send(buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_info, s_)
-                    bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return_s)[:, np.newaxis], np.array(buffer_return_l)[:, np.newaxis], np.array(buffer_adv_s)[:, np.newaxis], np.array(buffer_adv_l)[:, np.newaxis], np.vstack(info_num)     
-                    QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
+                    buffer_return_1, buffer_return_2, buffer_adv_1, buffer_adv_2, info_num = self.process_and_send(buffer_s, buffer_a, buffer_rl, buffer_info, s_)
+                    adv = buffer_adv_1 #(buffer_adv_1 + buffer_adv_2)/2
+                    bs, ba, bret_1, bret_2, badv, br, binfo = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return_1)[:, np.newaxis], np.array(buffer_return_2)[:, np.newaxis], np.array(adv)[:, np.newaxis], np.vstack(buffer_rl), np.vstack(info_num)     
+                    QUEUE.put(np.hstack((bs, ba, bret_1, bret_2, badv, br, binfo)))          # put data in the queue
 
                     # if info == 'goal':
-                    #     aug_s, aug_a, aug_return_s, aug_return_l, aug_adv_s, aug_adv_l, info_num = self.get_aurgm_batch(5, buffer_s, buffer_a, buffer_return_s, buffer_return_l, info_num)
+                    #     aug_s, aug_a, aug_return_s, aug_return_l, aug_adv_l, info_num = self.get_aurgm_batch(5, buffer_s, buffer_a, buffer_return_l, info_num)
                     #     if (aug_s != []):
-                    #         bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(aug_s), np.vstack(aug_a), np.array(aug_return_s)[:, np.newaxis], np.array(aug_return_l)[:, np.newaxis], np.array(aug_adv_s)[:, np.newaxis], np.array(aug_adv_l)[:, np.newaxis], np.vstack(info_num)     
-                    #         QUEUE.put(np.hstack((bs, ba, bret_s, bret_l, badv_s, badv_l, binfo)))          # put data in the queue
+                    #         bs, ba, bret_l, badv_l, binfo = np.vstack(aug_s), np.vstack(aug_a), np.array(aug_return_l)[:, np.newaxis], np.array(aug_adv_l)[:, np.newaxis], np.vstack(info_num)     
+                    #         QUEUE.put(np.hstack((bs, ba, bret_l, badv_l, binfo)))          # put data in the queue
                     #         GLOBAL_UPDATE_COUNTER += len(aug_a)
                     #         print('generage new batch:', len(aug_a))
 
-                    buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_vpred_s, buffer_vpred_l, buffer_info = [], [], [], [], [], [], []
+                    buffer_s, buffer_a, buffer_rl, buffer_vpred_l, buffer_info = [], [], [], [], []
                     if self.wid == 0:
                         print("step collected:: %7.4f| %7.4f| %7.4f" %(GLOBAL_UPDATE_COUNTER/BATCH_SIZE, GLOBAL_UPDATE_COUNTER, BATCH_SIZE))
                     if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE:

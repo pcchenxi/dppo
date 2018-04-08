@@ -125,7 +125,7 @@ function reset(inInts,inFloats,inStrings,inBuffer)
 
     target_pos = {}
     target_pos[1] = 0
-    target_pos[2] = math.random()*1.5
+    target_pos[2] = math.random()*1
     target_pos[3] = _start_t_pos[3]
     simSetObjectPosition(_target_hd, -1, target_pos)
 
@@ -143,6 +143,7 @@ function reset(inInts,inFloats,inStrings,inBuffer)
         simSetObjectOrientation(objects[i], _base_hd, _start_ori[i])        
         simResetDynamicObject(objects[i])
     end
+
     local init_wheel_angle = (math.random()-0.5)*2 * math.pi 
     for i=17, 20, 1 do
         simSetJointPosition(_joint_hds[i], init_wheel_angle)
