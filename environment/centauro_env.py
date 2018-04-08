@@ -24,7 +24,7 @@ map_pixel = int(map_size/grid_size)
 observation_pixel = int(observation_range/grid_size)
 
 obstacle_num = 5
-observation_space = 24 + 3 + 3 + 3 #map_pixel*map_pixel + 25  # 60 x 60 + 8  2*3 + 2 + 2
+observation_space = 44 + 6 + 3 #map_pixel*map_pixel + 25  # 60 x 60 + 8  2*3 + 2 + 2
 # observation_space = obstacle_num*3 + 2 + 2
 
 action_space = 24 #len(action_list)
@@ -34,8 +34,8 @@ action_type = spaces.Box(-1, 1, shape = (action_space,))
 lua_script_name = 'world_visual'
 
 REWARD_GOAL = 5
-REWARD_STEP =  -0.03
-REWARD_CRASH = -3
+REWARD_STEP =  -0.05
+REWARD_CRASH = -1
 
 class Simu_env():
     def __init__(self, port_num):
@@ -68,8 +68,9 @@ class Simu_env():
         # return spaces.Discrete(len(action_list))
 
     def convert_state(self, robot_state, target_state, rot_vel):
-        state = np.asarray(robot_state[:24])
-        state = np.append(state, robot_state[-3:])
+        state = np.asarray(robot_state[:20])
+        state = np.append(state, robot_state[24:])
+        # state = np.append(state, robot_state[-3:])
         state = np.append(state, rot_vel)
         # observation = self.terrain_map.flatten()
         # target_info = state[3:5]
@@ -134,17 +135,15 @@ class Simu_env():
                 action = action_list[action]
 
         _, _, robot_state, _, found_pose = self.call_sim_function(lua_script_name, 'step', action)
-        time.sleep(0.2)
-        action = np.zeros(len(action))
-        _, _, robot_state, _, found_pose = self.call_sim_function(lua_script_name, 'step', action)
-        time.sleep(5)
         target_state, rot_vel, reward_short, reward_long, is_finish, info = self.check_state(action, found_pose)
+        # time.sleep(0.2)
 
         if info == 'goal':
             action = np.zeros(len(action))
             _, _, robot_state, _, found_pose = self.call_sim_function(lua_script_name, 'step', action)
             time.sleep(1)
             target_state, rot_vel, reward_short, reward_long, is_finish, info = self.check_state(action, found_pose)
+            reward_long += REWARD_GOAL
 
         state_ = self.convert_state(robot_state, target_state, rot_vel)
 
@@ -165,7 +164,7 @@ class Simu_env():
 
         info = 'unfinish'
         is_finish = False
-
+        # print(dist, g_pose[-1])
         # action = np.asarray(action)
         # action_diff = abs(action - self.action_pre)
         action_cost = -np.sum(action * action)
@@ -183,6 +182,13 @@ class Simu_env():
 
         self.dist_pre = dist
 
+        if found_pose == bytearray(b"b"):       # when collision or no pose can be found
+            # is_finish = True
+            # reward_short = -1
+            reward_long = REWARD_CRASH/10
+            alive_reward = 0
+            info = 'bad pose'
+            
         if found_pose == bytearray(b"a"):       # when collision or no pose can be found
             is_finish = True
             # reward_short = -1
@@ -199,22 +205,16 @@ class Simu_env():
             target_reward = 0
             info = 'crash'
 
-        if found_pose == bytearray(b"b"):       # when collision or no pose can be found
-            # is_finish = True
-            # reward_short = -1
-            reward_long = REWARD_CRASH/10
-            alive_reward = 0
-            info = 'bad pose'
-
         # print('dist', dist, target_state)
-        if dist < 0.2 and info != 'crash': # and diff_l < 0.02:
+        if dist < 0.1 and g_pose[-1] < 0.1 and info != 'crash': # and diff_l < 0.02:
         # if robot_state[2] > 0.2 and info != 'crash':
             is_finish = True
-            reward_long = REWARD_GOAL
-            # self.goal_cound += 1
-            # if self.goal_cound > 3:
             info = 'goal'
-            #     reward_long = REWARD_GOAL
+            reward_long = REWARD_GOAL/5
+            # self.goal_cound += 1
+            # if self.goal_cound > 10:
+            #     info = 'goal'
+            #     reward_long = REWARD_GOAL*10
             #     is_finish = True
         else:
             self.goal_cound = 0
@@ -228,7 +228,7 @@ class Simu_env():
             reward_long = REWARD_CRASH
             info = 'out'
 
-        reward = (reward_long + 10*target_reward - sum_acc*0.1 + REWARD_STEP) * 0.2
+        reward = (reward_long + 10*target_reward + REWARD_STEP - sum_acc*0)
         return reward_short, reward, is_finish, info
 
     ####################################  interface funcytion  ###################################

@@ -52,7 +52,7 @@ class VecNormalize(object):
             np.save('./ret_var', self.ret_l_rms.var)
             self.count = 0
 
-        # self.count += 1
+        self.count += 1
 
         return obs, rews_s, rews_l, news, infos
     def _obfilt(self, obs):

@@ -16,13 +16,13 @@ import cv2
 
 EP_MAX = 500000
 EP_LEN = 50
-N_WORKER = 1               # parallel workers
+N_WORKER = 8               # parallel workers
 GAMMA = 0.98                # reward discount factor
-LAM = 1
+LAM = 0.95
 LR = 0.0001
 
-BATCH_SIZE = 10000
-MIN_BATCH_SIZE = int(BATCH_SIZE/2)-1       # minimum batch size for updating PPO
+BATCH_SIZE = 3000
+MIN_BATCH_SIZE = 512 #int(BATCH_SIZE/5)-1       # minimum batch size for updating PPO
 
 UPDATE_STEP = 10            # loop update operation n-steps
 EPSILON = 0.2              # for clipping surrogate objective
@@ -99,7 +99,7 @@ class PPO(object):
         # print(params)
 
         grads = tf.gradients(loss, params)
-        max_grad_norm = 0.05
+        max_grad_norm = 1
         if max_grad_norm is not None:
             grads_clipped, _grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
         grads_and_params = list(zip(grads_clipped, params))
@@ -118,7 +118,7 @@ class PPO(object):
         self.ratio = ratio
         self.grad_norm = _grad_norm
 
-        self.load_model()   
+        # self.load_model()   
 
     def load_model(self):
         print ('Loading Model...')
@@ -178,28 +178,30 @@ class PPO(object):
         return h_concat
 
     def _build_anet(self, name, input_state, trainable):
-        # w_init = tf.contrib.layers.xavier_initializer()
+        w_init = tf.contrib.layers.xavier_initializer()
         # w_init = tf.zeros_initializer()
         # w_init = tf.random_normal_initializer(0., 0.01)
         # w_init_big = tf.random_normal_initializer(0., 0.01)
+        # w_init = tf.orthogonal_initializer(2)
         with tf.variable_scope(name):
             # feature = self._build_feature_net('feature', input_state, trainable=trainable)
-            h1 = tf.layers.dense(input_state, 256, tf.nn.relu, kernel_initializer=tf.orthogonal_initializer(2), name = 'fc11', trainable=trainable)
-            feature = tf.layers.dense(h1, 128, tf.nn.relu, kernel_initializer=tf.orthogonal_initializer(2), name = 'fc12', trainable=trainable)
+            h1 = tf.layers.dense(input_state, 256, tf.nn.relu, kernel_initializer=w_init, name = 'fc1', trainable=trainable)
+            h2 = tf.layers.dense(h1, 256, tf.nn.relu, kernel_initializer=w_init, name = 'fc2', trainable=trainable)
+            h3 = tf.layers.dense(h2, 256, tf.nn.relu, kernel_initializer=w_init, name = 'fc3', trainable=trainable)
 
             with tf.variable_scope('actor_critic'):
-                h4 = tf.layers.dense(feature, 128, tf.nn.relu, kernel_initializer=tf.orthogonal_initializer(2), name = 'fc1', trainable=trainable)
+                h4 = tf.layers.dense(h3, 128, tf.nn.relu, kernel_initializer=w_init, name = 'fc4', trainable=trainable)
 
                 if isinstance(Action_Space, gym.spaces.Box):
                     print('continue action',A_DIM, S_DIM)
-                    pi = tf.layers.dense(h4, A_DIM, kernel_initializer=tf.orthogonal_initializer(0.01), name = 'fc_pi', trainable=trainable)
+                    pi = tf.layers.dense(h4, A_DIM, kernel_initializer=w_init, name = 'fc_pi', trainable=trainable)
                     logstd = tf.get_variable(name="logstd", shape=[1, A_DIM], initializer=tf.zeros_initializer())
                     pdparam = tf.concat([pi, pi * 0.0 + logstd], axis=1)
                     pdtype = make_pdtype(Action_Space)
                     pd = pdtype.pdfromflat(pdparam)
                 else:
                     print('discrate action',A_DIM, S_DIM)
-                    pi = tf.layers.dense(h4, A_DIM, kernel_initializer=tf.orthogonal_initializer(0.01), name = 'fc_pi', trainable=trainable)
+                    pi = tf.layers.dense(h4, A_DIM, kernel_initializer=w_init, name = 'fc_pi', trainable=trainable)
                     pdtype = make_pdtype(Action_Space)
                     pd = pdtype.pdfromflat(pi)   
 
@@ -600,6 +602,7 @@ class Worker(object):
         for index in reversed(range(len(buffer_reward))):
             # if buffer_info[index] == 'crash' or buffer_info[index] == 'goal':
             if mode == 'long':
+                # if buffer_info[index] != 'unfinish':
                 if buffer_info[index] == 'goal':
                     nonterminal = 0
                 else:
@@ -788,6 +791,7 @@ class Worker(object):
                     break
         print (goal_num/count)
 
+
     def work(self):
         global GLOBAL_EP, GLOBAL_STEP, GLOBAL_RUNNING_R, GLOBAL_UPDATE_COUNTER \
             , Goal_states, Goal_count, Goal_return, Goal_buffer_full \
@@ -821,7 +825,7 @@ class Worker(object):
             saved_ep = False
             
             s = self.env.reset( 0, 1, 1)
-            # a = self.ppo.choose_action(s, False)
+            a = self.ppo.choose_action(s, False)
             while(1):
                 if not ROLLING_EVENT.is_set():                  # while global PPO is updating
                     ROLLING_EVENT.wait()                        # wait until PPO is updated
@@ -832,15 +836,14 @@ class Worker(object):
                     update_counter += 1
                     break
 
-                a = self.ppo.choose_action(s, False)
-                    
-                # for i in range(len(a)-2):
-                #     a[i] = 0
+                if t%3 == 0:
+                    a = self.ppo.choose_action(s, False)
+                for i in range(len(a)-4):
+                    a[i] = 0
                 
                 s_, r_short, r_long, done, info = self.env.step(a)
-
-                if self.wid == 0:
-                    print(a[-2:])
+                # if self.wid == 0:
+                #     print(a[-2:])
                 # print('action generated:', a)
                 # self.ppo.get_action_prob(s)
                 vpred_s, vpred_l = self.ppo.get_v(s)
@@ -867,10 +870,11 @@ class Worker(object):
                             
 
                 if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE or t >= ep_length-1 or done:
-                    # if self.wid == 0 and done and (info == 'fall' or info == 'out'):
-                    #     # print(info)
-                    #     step_left = ep_length - t
-                    #     buffer_rl[-1] += self.env.reward_crash * step_left
+                    if done and info == 'goal':
+                        buffer_a[-1] = np.zeros(len(a))
+                    
+                    for i in range(len(buffer_rl)):
+                        buffer_rl[i] = buffer_rl[i] * 0.5
 
                     buffer_return_s, buffer_return_l, buffer_adv_s, buffer_adv_l, info_num = self.process_and_send(buffer_s, buffer_a, buffer_rs, buffer_rl, buffer_info, s_)
                     bs, ba, bret_s, bret_l, badv_s, badv_l, binfo = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return_s)[:, np.newaxis], np.array(buffer_return_l)[:, np.newaxis], np.array(buffer_adv_s)[:, np.newaxis], np.array(buffer_adv_l)[:, np.newaxis], np.vstack(info_num)     

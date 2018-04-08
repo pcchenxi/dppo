@@ -25,6 +25,9 @@ function start()
     -- sleep (3)
     -- print('reset')
     _floor_hd = simGetObjectHandle('floor')
+    _collection_wheel_hd = simGetCollectionHandle('wheels')
+    _wheel_hds = simGetCollectionObjects(_collection_wheel_hd)
+
     _base_hd = simGetObjectHandle('world_visual')
     _fake_robot_hd = simGetObjectHandle('fake_robot')
     _robot_hd = simGetObjectHandle('centauro')
@@ -122,7 +125,7 @@ function reset(inInts,inFloats,inStrings,inBuffer)
 
     target_pos = {}
     target_pos[1] = 0
-    target_pos[2] = math.random()*1.8
+    target_pos[2] = math.random()*1.5
     target_pos[3] = _start_t_pos[3]
     simSetObjectPosition(_target_hd, -1, target_pos)
 
@@ -132,7 +135,6 @@ function reset(inInts,inFloats,inStrings,inBuffer)
     robot_pos[3] = _start_pos[3]
     simSetObjectPosition(_base_hd, -1, robot_pos)
 
-    local init_wheel_angle = (math.random()-0.5)*2 * math.pi 
     reset_joint(_joint_hds)
 
     local objects=simGetObjectsInTree(_base_hd,sim_handle_all,0)
@@ -141,6 +143,7 @@ function reset(inInts,inFloats,inStrings,inBuffer)
         simSetObjectOrientation(objects[i], _base_hd, _start_ori[i])        
         simResetDynamicObject(objects[i])
     end
+    local init_wheel_angle = (math.random()-0.5)*2 * math.pi 
     for i=17, 20, 1 do
         simSetJointPosition(_joint_hds[i], init_wheel_angle)
         simSetJointTargetPosition(_joint_hds[i], init_wheel_angle)
@@ -183,42 +186,41 @@ function reset(inInts,inFloats,inStrings,inBuffer)
     -- _current_ep = convert_current_ep()
     -- _current_tra = {}      
     -- _current_tra[1] = _current_ep
+    robot_joints = get_joint_values(_joint_hds)
     return {}, {}, {}, ''
 end
 
 function step(inInts,actions,inStrings,inBuffer)
-    if actions[#actions] > -10 then
-        local robot_joints = get_joint_values(_joint_hds)
-        for i=1, 20, 1 do
-            if actions[i] >= -1 then 
-                local hd = _joint_hds[i]
-                if actions[i] == 0 then 
-                    simSetJointTargetVelocity(hd, 0)
-                    simSetJointTargetPosition(hd, robot_joints[i])
-                else
-                    simSetJointTargetVelocity(hd, 0.5*actions[i])
-                    simSetJointTargetPosition(hd, 1001)
-                end
-            end
+
+    local robot_joints = get_joint_values(_joint_hds)
+    for i=1, 16, 1 do
+        local hd = _joint_hds[i]
+        if actions[i] == 0 then 
+            simSetJointTargetVelocity(hd, 0)
+            simSetJointTargetPosition(hd, robot_joints[i])
+        else
+            simSetJointTargetVelocity(hd, math.pi*actions[i]*20/180)
         end
-        for i=21, 24, 1 do
-            local hd = _joint_hds[i]
-            if actions[i] == 0 then 
-                simSetJointTargetVelocity(hd, 0)
-                simSetJointTargetPosition(hd, robot_joints[i])
-            else
-                simSetJointTargetVelocity(hd, 0.5*actions[i])
-                simSetJointTargetPosition(hd, 1001)
-            end
-            --simSetJointForce(hd, 100)
-        end 
-        -- -- move robot base
-        
-        -- rotate_robot(_joint_hds, actions[#actions-2])
-        --move_robot(_joint_hds, actions[#actions-1], actions[#actions])
-        -- _, v = simGetObjectFloatParameter(_joint_hds[17], 2012)
-        -- print('velocity', v)
     end
+    for i=17, 20, 1 do
+        if actions[i] == 0 then 
+            simSetJointTargetVelocity(_joint_hds[i], 0)
+            simSetJointTargetPosition(_joint_hds[i], robot_joints[i])
+        else
+            simSetJointTargetVelocity(_joint_hds[i], math.pi*actions[i]*50/180)
+        end
+    end         
+    for i=21, 24, 1 do
+        simSetJointTargetVelocity(_joint_hds[i], math.pi*actions[i]*400/180)
+        --simSetJointForce(hd, 100)
+    end 
+    -- -- move robot base
+    
+    -- rotate_robot(_joint_hds, actions[#actions-2])
+    --move_robot(_joint_hds, actions[#actions-1], actions[#actions])
+    -- _, v = simGetObjectFloatParameter(_joint_hds[17], 2012)
+    -- print('velocity', v)
+
     -- check collision
     local _, data = simCheckDistance(_collection_robot_hd, _collection_hd, 0.05)
     if data ~= nil then 
@@ -227,23 +229,17 @@ function step(inInts,actions,inStrings,inBuffer)
         res = 't'
     end
 
-    -- for i=1, #_joint_hds-4, 1 do
-    --     local joint_position = simGetObjectPosition(_joint_hds[i], -1)
-    --     if joint_position[3] < 0.15 then
-    --         res = 'a'
-    --         break
-    --     end
-    -- end
-
-    for i=#_joint_hds-3, #_joint_hds, 1 do
-        local joint_position = simGetObjectPosition(_joint_hds[i], -1)
-        if joint_position[3] > 0.1 then
-            res = 'a'
+    -- wheel leave the ground
+    for i=1, #_wheel_hds, 1 do
+        local result, data = simCheckDistance(_wheel_hds[i], _floor_hd, 0.05)
+        if data == nil  then
+            res = 'b'
             break
         end
     end
     
-    local result, data = simCheckDistance(_collection_robot_hd, _floor_hd, 0.1)
+    -- touch the ground
+    local result, data = simCheckDistance(_collection_robot_hd, _floor_hd, 0.05)
     -- print(data[1], data[2], data[3], data[4], data[5], data[6], data[7])
     if data ~= nil then 
         res = 'a'
@@ -342,8 +338,24 @@ function get_target_state(inInts,inFloats,inStrings,inBuffer)
 end
 
 function get_robot_position(inInts,inFloats,inStrings,inBuffer)
-    local pos =simGetObjectPosition(_robot_hd,-1)    
-    return {}, {pos[1], pos[2]}, {}, ''
+    local pos =simGetObjectPosition(_robot_hd,-1)
+    
+    local sum_x = 0
+    local sum_y = 0
+    for i=21, #_joint_hds, 1 do 
+        local w_pos =simGetObjectPosition(_joint_hds[i],-1)
+        sum_x = sum_x + w_pos[1]
+        sum_y = sum_y + w_pos[2]
+    end
+    local c_x = sum_x/4
+    local c_y = sum_y/4
+
+    local t_pos =simGetObjectPosition(_target_hd,-1)
+    local diff_x = math.abs(c_x - t_pos[1])
+    local diff_y = math.abs(c_y - t_pos[2])
+
+    local dist = math.sqrt(diff_x*diff_x + diff_y*diff_y)
+    return {}, {pos[1], pos[2], dist}, {}, ''
 end
 
 function get_robot_state(inInts,inFloats,inStrings,inBuffer)  

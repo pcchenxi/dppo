@@ -39,7 +39,7 @@ function move_robot(joint_hds, target_x, target_y)
     end
     
     for i=21, 24, 1 do
-        if i == 21 or i == 23 then
+        if i == 21 or i == 22 then
             simSetJointTargetVelocity(joint_hds[i], velocity)
         else
             simSetJointTargetVelocity(joint_hds[i], -velocity)
