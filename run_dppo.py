@@ -18,10 +18,10 @@ EP_MAX = 500000
 EP_LEN = 50
 N_WORKER = 8               # parallel workers
 GAMMA = 0.98                # reward discount factor
-LAM = 0.95
+LAM = 0.98
 LR = 0.0001
 
-BATCH_SIZE = 5000
+BATCH_SIZE = 4000
 MIN_BATCH_SIZE = 1000 #int(BATCH_SIZE/5)-1       # minimum batch size for updating PPO
 
 UPDATE_STEP = 10            # loop update operation n-steps
@@ -83,7 +83,7 @@ class PPO(object):
         OLDNEGLOGPAC = oldpd.neglogp(self.tfa)
         self.entropy = tf.reduce_mean(pd.entropy())
 
-        vf_loss1 = tf.square(self.v1 - self.tfdc_r1)
+        # vf_loss1 = tf.square(self.v1 - self.tfdc_r1)
 
         vpredclipped2 = oldv2 + tf.clip_by_value(self.v2 - oldv2, - EPSILON, EPSILON)
         vf_losses12 = tf.square(self.v2 - self.tfdc_r2)
@@ -103,14 +103,14 @@ class PPO(object):
         # print(params)
 
         grads = tf.gradients(loss, params)
-        max_grad_norm = 1
+        max_grad_norm = 0.01
         if max_grad_norm is not None:
             grads_clipped, _grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
         grads_and_params = list(zip(grads, params))
         trainer = tf.train.AdamOptimizer(learning_rate=LR, epsilon=1e-5)
         self.train_op = trainer.apply_gradients(grads_and_params)
 
-        self.train_op1 = tf.train.AdamOptimizer(0.001).minimize(vf_loss1)
+        # self.train_op1 = tf.train.AdamOptimizer(0.001).minimize(vf_loss1)
         self.sess.run(tf.global_variables_initializer())
 
         self.saver = tf.train.Saver()
@@ -119,8 +119,8 @@ class PPO(object):
         # self.pi_prob = tf.nn.softmax(pd.logits)
         self.aloss = pg_loss 
         self.closs = tf.reduce_mean(vf_loss2)
-        self.closs1 = vf_loss1
-        self.total_loss = loss
+        self.closs1 = vf_loss2
+        self.total_loss = grads_and_params
         self.ratio = ratio
         self.grad_norm = _grad_norm
 
@@ -190,12 +190,18 @@ class PPO(object):
         # w_init_big = tf.random_normal_initializer(0., 0.01)
         # w_init = tf.orthogonal_initializer(2)
         with tf.variable_scope(name):
-            # feature = self._build_feature_net('feature', input_state, trainable=trainable)
-            h1 = tf.layers.dense(input_state, 256, tf.nn.relu, kernel_initializer=w_init, name = 'fc1', trainable=trainable)
-            h2 = tf.layers.dense(h1, 256, tf.nn.relu, kernel_initializer=w_init, name = 'fc2', trainable=trainable)
-            h3 = tf.layers.dense(h2, 256, tf.nn.relu, kernel_initializer=w_init, name = 'fc3', trainable=trainable)
+            state_joint = tf.slice(input_state, [0, 0], [-1, S_DIM-3], name = 'state_joints') 
+            state_t = tf.slice(input_state, [0, S_DIM-3], [-1, 3], name = 'state_target') 
 
-            state_t = tf.slice(input_state, [0, S_DIM-3], [-1, 3], name = 'slice_ob') 
+            # feature = self._build_feature_net('feature', input_state, trainable=trainable)
+            h1 = tf.layers.dense(input_state, 64, tf.nn.relu, kernel_initializer=w_init, name = 'fc1', trainable=trainable)
+            # h2 = tf.layers.dense(h1, 64, tf.nn.relu, kernel_initializer=w_init, name = 'fc2', trainable=trainable)
+
+            concat_h = tf.concat([h1 , state_t], 1, name = 'concat')
+
+            h3 = tf.layers.dense(concat_h, 64, tf.nn.relu, kernel_initializer=w_init, name = 'fc3', trainable=trainable)
+
+            # state_t = tf.slice(input_state, [0, S_DIM-3], [-1, 3], name = 'slice_ob') 
 
             with tf.variable_scope('actor_critic'):
                 if isinstance(Action_Space, gym.spaces.Box):
@@ -207,16 +213,17 @@ class PPO(object):
                     pd = pdtype.pdfromflat(pdparam)
                 else:
                     print('discrate action',A_DIM, S_DIM)
-                    pi = tf.layers.dense(h4, A_DIM, kernel_initializer=w_init, name = 'fc_pi', trainable=trainable)
+                    pi = tf.layers.dense(h3, A_DIM, kernel_initializer=w_init, name = 'fc_pi', trainable=trainable)
                     pdtype = make_pdtype(Action_Space)
                     pd = pdtype.pdfromflat(pi)   
 
-                v1_h1 = tf.layers.dense(state_t, 64, tf.nn.relu, kernel_initializer=w_init, name = 'v1_h1', trainable=trainable)
-                v1_h2 = tf.layers.dense(v1_h1, 64, tf.nn.relu, kernel_initializer=w_init, name = 'v1_h2', trainable=trainable)
-                v1 = tf.layers.dense(v1_h2, 1, kernel_initializer=w_init, name = 'v1', trainable=trainable)
+                # v1_h1 = tf.layers.dense(state_t, 64, tf.nn.relu, kernel_initializer=w_init, name = 'v1_h1', trainable=trainable)
+                # v1_h2 = tf.layers.dense(v1_h1, 64, tf.nn.relu, kernel_initializer=w_init, name = 'v1_h2', trainable=trainable)
+                # v1 = tf.layers.dense(v1_h2, 1, kernel_initializer=w_init, name = 'v1', trainable=trainable)
 
                 v2 = tf.layers.dense(h3, 1, kernel_initializer=w_init, name = 'fc_v', trainable=trainable)
-
+                v1 = v2
+                
         params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=name)
         return pd, v1, v2, params
 
@@ -258,7 +265,7 @@ class PPO(object):
         feed_dict = {
             self.tfs: s, 
             self.tfa: a, 
-            self.tfdc_r1: r1, 
+            # self.tfdc_r1: r1, 
             self.tfdc_r2: r2, 
             self.tfadv_1: adv1, 
             self.tfadv_2: adv2, 
@@ -403,8 +410,16 @@ class PPO(object):
             adv_l = (adv_l.flatten())
             info = info.flatten()
             rew = rew.flatten()
-            ret_mean = r1.mean()
-            rew_mean = rew.mean()
+            # ret_mean = r1.mean()
+            # rew_mean = rew.mean()
+
+            sum_ret, sum_rew = 0, 0
+            for i in range(len(rew)):
+                sum_ret += r2[i]
+                sum_rew += rew[i]
+
+            ret_mean, rew_mean = sum_ret/len(rew), sum_rew/len(rew)
+
             # s, a, rl, adv_l, info = self.load_guid_tra(s, a, rl, adv_l, info)
 
             adv = adv_l
@@ -440,35 +455,36 @@ class PPO(object):
                     feed_dict = {
                         self.tfs: s, 
                         self.tfa: a, 
-                        self.tfdc_r1: r1, 
+                        # self.tfdc_r1: r1, 
                         self.tfdc_r2: r2, 
                         self.tfadv: adv, 
                         self.tf_is_train: False
                     }
-                    self.sess.run([self.train_op, self.train_op1], feed_dict = feed_dict)
+                    self.sess.run(self.total_loss, feed_dict = feed_dict)
+                    # self.sess.run(self.train_op1, feed_dict = feed_dict)
                     # self.sess.run([self.atrain_op, self.ctrain_op], feed_dict = feed_dict)
 
                 # tloss, aloss, vloss, entropy, grad_norm = self.check_overall_loss(s, a, rs, rl, adv)
                 # print("aloss: %7.4f|, vloss: %7.4f| entropy: %7.4f" % (aloss, vloss, entropy), grad_norm)
                 print(iteration)
 
-            feed_dict = {
-                self.tfs: s, 
-                self.tfa: a, 
-                self.tfdc_r1: r1, 
-                self.tfdc_r2: r2, 
-                self.tfadv: adv, 
-                self.tf_is_train: False
-            }
-            # onehota_prob, oldhota_prob, ratio = self.sess.run([self.a_prob, self.olda_prob, self.ratio], feed_dict = feed_dict)
-            # for i in range(len(r)):
-            #     print(onehota_prob[i], oldhota_prob[i], ratio[i])
+            # feed_dict = {
+            #     self.tfs: s, 
+            #     self.tfa: a, 
+            #     # self.tfdc_r1: r1, 
+            #     self.tfdc_r2: r2, 
+            #     self.tfadv: adv, 
+            #     self.tf_is_train: False
+            # }
+            # # onehota_prob, oldhota_prob, ratio = self.sess.run([self.a_prob, self.olda_prob, self.ratio], feed_dict = feed_dict)
+            # # for i in range(len(r)):
+            # #     print(onehota_prob[i], oldhota_prob[i], ratio[i])
 
-            ratio, v1, v2 = self.sess.run([self.ratio, self.v1, self.v2], feed_dict = feed_dict)
-            # ratio = ratio.flatten()
-            for i in range(len(r1)): #range(25):
-                print("rew %8.4f, r1 %8.4f, r2 %8.4f|, v1 %8.4f  v2 %8.4f|, adv %8.4f|, ratio %8.4f|"%(rew[i], r1[i], r2[i], v1[i], v2[i], adv[i], ratio[i]), info[i])
-                # print(a[i])
+            # ratio, v1, v2 = self.sess.run([self.ratio, self.v1, self.v2], feed_dict = feed_dict)
+            # # ratio = ratio.flatten()
+            # for i in range(len(r1)): #range(25):
+            #     print("rew %8.4f, r1 %8.4f, r2 %8.4f|, v1 %8.4f  v2 %8.4f|, adv %8.4f|, ratio %8.4f|"%(rew[i], r1[i], r2[i], v1[i], v2[i], adv[i], ratio[i]), info[i])
+            #     # print(a[i])
 
             tloss, aloss, vloss, entropy, grad_norm = self.sess.run([self.total_loss, self.aloss, self.closs, self.entropy, self.grad_norm], feed_dict = feed_dict)
             print('-------------------------------------------------------------------------------')
@@ -495,6 +511,9 @@ class PPO(object):
             # # if entropy < 1:         # stop training
             # if GLOBAL_STEP > 620000:
             #     COORD.request_stop()
+            if np.isnan(grad_norm):
+                print('explored!!!!!!!')
+                COORD.request_stop()
 
 
 class Worker(object):
@@ -587,24 +606,22 @@ class Worker(object):
         return aurg_s, aurg_a, aurg_ret_l, aurg_adv_l, aurg_info
 
     def compute_adv_return(self, buffer_reward, buffer_vpred, buffer_info):
-        if buffer_info[-1] == 'goal':
-            nonterminal = 0
-        else:
-            nonterminal = 1              
+        lastgaelam = 0.0
+        buffer_return = np.zeros(len(buffer_reward))
+        buffer_adv = np.zeros(len(buffer_reward))
 
-        v_s_ = buffer_vpred[-1]*nonterminal
-        buffer_return = []                           # compute discounted reward
-        for r in buffer_reward[::-1]:
-            v_s_ = r + GAMMA * v_s_
-            buffer_return.append(v_s_)
-        buffer_return.reverse()
-
-        buffer_adv = buffer_return - buffer_vpred[:-1]
-
-        # for index in range(len(buffer_reward)):
-        #     print(buffer_reward[index], buffer_return[index], buffer_vpred[index], buffer_adv[index])
-
-        # print('-----------------')
+        buffer_vpred[-1] = 0
+        for index in reversed(range(len(buffer_reward))):
+            if buffer_info[index] == 'goal':
+                nonterminal = 0
+            else:
+                nonterminal = 1
+           
+            delta = buffer_reward[index] + GAMMA * buffer_vpred[index+1] * nonterminal - buffer_vpred[index]
+            lastgaelam = delta + GAMMA * LAM * nonterminal * lastgaelam
+            buffer_adv[index] = lastgaelam
+        
+        buffer_return = buffer_adv + buffer_vpred[:-1]
         return buffer_adv, buffer_return
 
     def process_and_send(self, buffer_s, buffer_a, buffer_r, buffer_info, s_):
@@ -809,10 +826,10 @@ class Worker(object):
                     update_counter += 1
                     break
 
-                # if t%3 == 0:
-                a = self.ppo.choose_action(s, False)
-                # for i in range(len(a)-4):
-                #     a[i] = 0
+                if np.random.rand() > 0.5:
+                    a = self.ppo.choose_action(s, False)
+                for i in range(len(a)-12):
+                    a[i] = 0
                 
                 # state_v = self.ppo.sess.run(self.ppo.state_v, {self.ppo.tfs: s[np.newaxis, :]})
 
@@ -844,12 +861,44 @@ class Worker(object):
                 if GLOBAL_UPDATE_COUNTER >= BATCH_SIZE or t >= ep_length-1 or done:
                     if done and info == 'goal':
                         buffer_a[-1] = np.zeros(len(a))
-                    
-                    for i in range(len(buffer_rl)):
-                        buffer_rl[i] = buffer_rl[i] * 0.5
+
+                    if done and info != 'goal': 
+                        for i in range(len(buffer_rl)-1, 2, -2):
+                            if buffer_rl[i] < -0.025:
+                                stop_index = i
+                            # print(len(buffer_rl), stop_index)
+                                target_state = self.env.get_fake_tra_state(stop_index)
+                                target_state = np.array(target_state)
+                                fake_s = np.array(buffer_s)[:stop_index]
+
+                                # print(len(fake_s), len(target_state))
+                                for i in range(0, len(target_state), 3):
+                                    index = int(i/3)
+                                    # print(i, index)
+                                    fake_s[index][-3:] = target_state[i:i+3]
+
+                                fake_a = np.array(buffer_a)[:stop_index]
+                                fake_a[-1] = np.zeros(A_DIM)
+                                
+                                fake_r = np.array(buffer_rl)[:stop_index]
+                                fake_r[-1] = self.env.reward_goal
+
+                                fake_info = np.array(buffer_info)[:stop_index]
+                                fake_info[-1] = 'goal'
+
+                                GLOBAL_UPDATE_COUNTER += len(fake_r)
+
+                                buffer_return_1, buffer_return_2, buffer_adv_1, buffer_adv_2, info_num = self.process_and_send(fake_s, fake_a, fake_r, fake_info, s_)
+                                info_num = np.full(len(info_num), 11)
+                                adv = buffer_adv_2 #(buffer_adv_1 + buffer_adv_2)/2
+                                bs, ba, bret_1, bret_2, badv, br, binfo = np.vstack(fake_s), np.vstack(fake_a), np.vstack(buffer_return_1), np.vstack(buffer_return_2), np.vstack(adv), np.vstack(fake_r), np.vstack(info_num)     
+                                QUEUE.put(np.hstack((bs, ba, bret_1, bret_2, badv, br, binfo)))          # put data in the queue
+                                if self.wid == 0:
+                                    print('-----end fake tra-----', i)
+
 
                     buffer_return_1, buffer_return_2, buffer_adv_1, buffer_adv_2, info_num = self.process_and_send(buffer_s, buffer_a, buffer_rl, buffer_info, s_)
-                    adv = buffer_adv_1 #(buffer_adv_1 + buffer_adv_2)/2
+                    adv = buffer_adv_2 #(buffer_adv_1 + buffer_adv_2)/2
                     bs, ba, bret_1, bret_2, badv, br, binfo = np.vstack(buffer_s), np.vstack(buffer_a), np.array(buffer_return_1)[:, np.newaxis], np.array(buffer_return_2)[:, np.newaxis], np.array(adv)[:, np.newaxis], np.vstack(buffer_rl), np.vstack(info_num)     
                     QUEUE.put(np.hstack((bs, ba, bret_1, bret_2, badv, br, binfo)))          # put data in the queue
 

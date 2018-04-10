@@ -19,9 +19,9 @@ class VecNormalize(object):
         self.gamma = gamma
         self.epsilon = epsilon
 
-        # self.ret_l_rms.var = np.load('./ret_var.npy')
-        # self.ob_rms.mean = np.load('./ob_mean.npy')
-        # self.ob_rms.var = np.load('./ob_var.npy')
+        self.ret_l_rms.var = np.load('./ret_var.npy')
+        self.ob_rms.mean = np.load('./ob_mean.npy')
+        self.ob_rms.var = np.load('./ob_var.npy')
 
         self.count = 0
 
@@ -63,6 +63,9 @@ class VecNormalize(object):
         """
         obs = self.venv.reset(env_mode, reset_mode, save_ep)
         return self._obfilt(obs)
+
+    def get_fake_tra_state(self, stop_index):
+        return self.venv.get_fake_tra_state(stop_index)
 
     def save_ep(self):
         return self.venv.save_ep()

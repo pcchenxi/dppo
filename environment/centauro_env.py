@@ -82,6 +82,10 @@ class Simu_env():
         state = np.append(state, target_state[:3])
         return state
 
+    def get_fake_tra_state(self, stop_index):
+        _, _, retFloats, _, _ = self.call_sim_function(lua_script_name, 'get_fake_tra_state', [stop_index])    
+        return retFloats
+
     def reset(self, env_mode, reset_mode, save_ep):
         # print('reset')
         self.dist_pre = 1000
@@ -154,7 +158,8 @@ class Simu_env():
         # state_diff = np.sum(abs(robot_state[24] - self.state_pre[24]))/math.pi
         _, _, g_pose, _, _ = self.call_sim_function(lua_script_name, 'get_robot_position')
         _, _, acc, _, _ = self.call_sim_function('Accelerometer', 'get_acc_data')
-
+        _, _, floor_dist, _, _ = self.call_sim_function(lua_script_name, 'get_minimum_floor_dist')
+        
         sum_acc = np.sum(acc)
         # print(acc, sum_acc)
 
@@ -224,7 +229,8 @@ class Simu_env():
             reward_long = REWARD_CRASH
             info = 'out'
 
-        reward = (reward_long + 10*target_reward + REWARD_STEP - sum_acc*0)
+        # reward = (reward_long + 10*target_reward + REWARD_STEP - sum_acc*0)
+        reward = -floor_dist[0] + reward_long #-abs(sum_acc) 
         return reward, is_finish, info
 
     ####################################  interface funcytion  ###################################

@@ -62,6 +62,8 @@ function start()
         _start_ori[i] = simGetObjectOrientation(objects[i], _base_hd)    
     end
 
+    _tra_robot_g_pose = {}
+
     _current_tra = {}
     _current_ep = {}
     _pre_ep = {}
@@ -102,20 +104,21 @@ function check_avaiable_obstacle_hds()
     return hds
 end
 
-function get_minimum_obs_dist(inInts,inFloats,inStrings,inBuffer)
+function get_minimum_floor_dist(inInts,inFloats,inStrings,inBuffer)
     local threshold = 0.1
-    local res, data = simCheckDistance(_collection_robot_hd, _collection_hd, threshold)
+    local res, data = simCheckDistance(_collection_robot_hd, _floor_hd, threshold)
     if data == nil then 
         dist = threshold
     else 
         dist = data[7]
     end
     -- print(dist)    
-    return {}, {dist}, {}, ''
+    return {}, {threshold - dist}, {}, ''
 end
 
 function reset(inInts,inFloats,inStrings,inBuffer)
     global_counter = global_counter + 1
+    _tra_robot_g_pose = {}
 
     -- print('in reset')
     -- simSetModelProperty(_robot_hd, 32)
@@ -247,7 +250,39 @@ function step(inInts,actions,inStrings,inBuffer)
     end 
 
     _, joint_pose, _, _ = get_robot_state()
+
+
+    local robot_loc  = simGetObjectPosition(_robot_hd, -1)
+    local robot_ori  = simGetObjectOrientation(_robot_hd, -1)
+    local robot_state = {robot_loc, robot_ori}
+    _tra_robot_g_pose[#_tra_robot_g_pose+1] = robot_state
+    
     return {}, joint_pose, {}, res
+end
+
+function get_fake_tra_state(inInts,inFloats,inStrings,inBuffer)
+    local stop_step = inFloats[1]
+    -- print(stop_step)
+    local target_states = {}
+    local last_state = _tra_robot_g_pose[#_tra_robot_g_pose]
+    local last_loc = last_state[1]
+
+    last_loc[3] = _start_t_pos[3]
+    simSetObjectPosition(_target_hd, -1, last_loc)
+    for i=1, stop_step, 1 do
+        local robot_state = _tra_robot_g_pose[i][1]
+        local robot_ori = _tra_robot_g_pose[i][2]
+
+        simSetObjectPosition(_robot_hd, -1, robot_state)
+        simSetObjectOrientation(_robot_hd, -1, robot_ori)
+
+        local target_state = simGetObjectPosition(_target_hd, _robot_hd)
+        target_states[#target_states+1] = target_state[1]
+        target_states[#target_states+1] = target_state[2]
+        target_states[#target_states+1] = target_state[3]
+    end
+
+    return {}, target_states, {}, ''
 end
 
 function clear_history(inInts,inFloats,inStrings,inBuffer)
